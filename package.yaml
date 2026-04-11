@@ -13,7 +13,9 @@ description: microFomega implementation experiments
 
 dependencies:
   - base >= 4.18 && < 5
+  - bytestring
   - containers
+  - attoparsec
   - deepseq
   - flatparse
   - megaparsec
@@ -28,13 +30,16 @@ library:
   source-dirs: src
   exposed-modules:
     - MuFomega
+    - MuFomega.Pretty
     - MuFomega.Traversal
     - MuFomega.Shift
     - MuFomega.Substitute
+    - MuFomega.Parser.Megaparsec
+    - MuFomega.Parser.Attoparsec
+    - MuFomega.Parser.FlatParse
     - MuFomega.Syntax.Common
     - MuFomega.Syntax.Lazy
     - MuFomega.Syntax.Strict
-    - MuFomega.Syntax.Convert
 
 executables:
   mu-fomega:
@@ -47,6 +52,19 @@ tests:
   mu-fomega-test:
     main: Spec.hs
     source-dirs: test
+    other-modules:
+      - MuFomega.Gen
+      - MuFomega.PrettySpec
+      - MuFomega.SyntaxSpec
+      - MuFomega.ShiftSpec
+      - MuFomega.SubstituteSpec
+      - MuFomega.TraversalSpec
+      - MuFomega.Syntax.Convert
+      - MuFomega.Parser.AttoparsecSpec
+      - MuFomega.Parser.FlatParseSpec
+      - MuFomega.Parser.MegaparsecSpec
+      - MuFomega.Parser.EquivalenceSpec
+      - MuFomega.Parser.CommonGrammarSpec
     dependencies:
       - mu-fomega
       - QuickCheck
@@ -56,9 +74,11 @@ tests:
       - text
 
 benchmarks:
-  strict-vs-lazy-bench:
-    main: StrictVsLazyBench.hs
-    source-dirs: bench
+  parser-bench:
+    main: ParserBench.hs
+    source-dirs: bench/parser
     dependencies:
       - mu-fomega
       - criterion
+      - deepseq
+      - text

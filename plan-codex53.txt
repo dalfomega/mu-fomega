@@ -231,6 +231,12 @@ Canonical forms (both reps):
 - Reject invalid constructs (`()`, `λ(x) → x`, malformed indices, leading-zero literals).
 - Success parse for complete README example.
 
+### Step 4.4: Attoparsec Parser
+- Implement grammar equivalent to Megaparsec parser.
+
+**Tests:**
+- Re-run full parser suite against Attoparsec.
+
 ---
 
 ## Phase 5 — FlatParse Parser
@@ -342,10 +348,10 @@ All must produce the same observable normal forms as substitution-based normaliz
 
 ### Step 10.1: Workload generator
 - Deep lambdas, deep lets, large arithmetic trees, long application chains.
-- Church-encoded workloads with many reductions but small final numerals.
+- Church-encoded workloads with many reductions but small final numerals. Implement converting Church-encoded Natural to the built-in Natural and back, in order to create and validate Church-encoded numerals.
 
 ### Step 10.2: Benchmark matrix
-- Parser backends: Megaparsec vs FlatParse.
+- Parser backends: Megaparsec vs Attoparse vs FlatParse.
 - Evaluators: substitution + 4 NbE variants.
 - AST strictness: Lazy vs Strict where implementation exists.
 
