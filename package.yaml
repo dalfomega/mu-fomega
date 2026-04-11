@@ -1,0 +1,64 @@
+name: mu-fomega
+version: 0.1.0.0
+license: BSD-3-Clause
+author: mu-fomega contributors
+maintainer: mu-fomega contributors
+copyright: "2026"
+tested-with: GHC ==9.14.*
+
+extra-source-files:
+  - README.md
+
+description: microFomega implementation experiments
+
+dependencies:
+  - base >= 4.18 && < 5
+  - containers
+  - deepseq
+  - flatparse
+  - megaparsec
+  - mtl
+  - prettyprinter
+  - text
+
+ghc-options:
+  - -Wall
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - MuFomega
+    - MuFomega.Traversal
+    - MuFomega.Shift
+    - MuFomega.Substitute
+    - MuFomega.Syntax.Common
+    - MuFomega.Syntax.Lazy
+    - MuFomega.Syntax.Strict
+    - MuFomega.Syntax.Convert
+
+executables:
+  mu-fomega:
+    main: Main.hs
+    source-dirs: app
+    dependencies:
+      - mu-fomega
+
+tests:
+  mu-fomega-test:
+    main: Spec.hs
+    source-dirs: test
+    dependencies:
+      - mu-fomega
+      - QuickCheck
+      - deepseq
+      - hspec
+      - hspec-megaparsec
+      - text
+
+benchmarks:
+  strict-vs-lazy-bench:
+    main: StrictVsLazyBench.hs
+    source-dirs: bench
+    dependencies:
+      - mu-fomega
+      - criterion
