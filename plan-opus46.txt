@@ -1,0 +1,568 @@
+# microFω Implementation Plan
+## Detailed Step-by-Step with Tests
+
+### Environment
+- GHC 9.14.1, Cabal 3.16.1, hpack 0.39.1
+- macOS / aarch64
+
+---
+
+## Phase 0: Project Scaffolding & Tooling Setup
+
+### Step 0.1 — Initialize Haskell project with hpack
+- Create `package.yaml` (hpack format) with:
+  - Library: `src/`
+  - Executables: `mu-fomega-exe` in `app/`
+  - Test suite: `mu-fomega-test` in `test/`
+  - Benchmark suite: `mu-fomega-bench` in `bench/`
+- Dependencies: `base`, `text`, `containers`, `mtl`
+- Test dependencies: `hspec`, `hspec-discover`, `QuickCheck`, `hspec-megaparsec`
+- Benchmark dependencies: `criterion`, `deepseq`
+- Create `cabal.project` file with GHC 9.14.1 configuration
+- Create minimal `app/Main.hs`, `src/MuFomega.hs`, `test/Spec.hs`
+- Run build script: `./scripts/build.sh`
+- Verify: `./scripts/build.sh`, `./scripts/test.sh`, `./scripts/bench.sh` all succeed (even if trivially)
+
+**Tests:** Smoke test — `./scripts/test.sh` runs and reports 0 failures.
+
+### Step 0.2 — Set up test coverage with HPC
+- Add GHC options for coverage: `-fhpc` or use `cabal test --coverage`
+- Create a script: `./scripts/coverage.sh` → runs `cabal test --coverage` and opens HPC report
+- Goal: 100% coverage on all library modules (enforced in CI or by manual checks)
+
+**Tests:** Coverage report is generated and viewable in a browser.
+
+### Step 0.3 — Set up benchmarking infrastructure
+- Create `bench/Main.hs` with Criterion harness
+- Placeholder benchmarks for parser and evaluator
+- Verify: `./scripts/bench.sh` runs and produces output
+
+**Tests:** Benchmark executable compiles and runs.
+
+---
+
+## Phase 1: AST Definition
+
+### Step 1.1 — Define core AST types (`Expr`, `Builtin`, `Var`)
+Create `src/MuFomega/Syntax.hs`:
+
+```haskell
+data Var = Var !Text !Int  -- name and de Bruijn index
+  deriving (Eq, Ord, Show)
+
+data Builtin
+  = BNatural        -- "Natural" (the type)
+  | BNaturalFold    -- "Natural/fold"
+  | BNaturalSubtract -- "Natural/subtract"
+  | BType           -- "Type"
+  | BKind           -- "Kind"
+  deriving (Eq, Ord, Show, Enum, Bounded)
+
+data Expr
+  = ELit !Natural                     -- literal natural number
+  | EBuiltin !Builtin                 -- built-in constant
+  | EVar !Var                         -- variable (possibly with de Bruijn index)
+  | EAnnot !Expr !Expr                -- e : T
+  | ELam !Text !Expr !Expr            -- λ(x : A) → b
+  | EForall !Text !Expr !Expr         -- ∀(x : A) → B
+  | ELet !Text !Expr !Expr            -- let x = a in b
+  | EApp !Expr !Expr                  -- f a
+  | EPlus !Expr !Expr                 -- a + b
+  | ETimes !Expr !Expr                -- a * b
+  deriving (Eq, Ord, Show)
+```
+
+Implement `NFData` instances for benchmarking (via `deepseq`).
+
+**Tests:**
+- Construct each `Expr` variant and pattern-match on it (round-trip identity)
+- `Eq` tests: structurally equal expressions are equal; different ones are not
+- `Show` produces parseable output (basic sanity)
+- QuickCheck `Arbitrary` instance for `Expr` (will be used extensively later)
+
+### Step 1.2 — Implement `exprMap` utility
+A generic map-like function over `Expr` sub-expressions, to be used by `shift`, `substitute`, alpha-normalization, etc.
+
+```haskell
+exprMap :: (Int -> Var -> Expr) -> Expr -> Expr
+```
+
+Where the `Int` argument tracks the binding depth.
+
+**Tests:**
+- Identity map: `exprMap (\_ v -> EVar v) e == e` for all `e`
+- QuickCheck property: identity map preserves structure
+
+---
+
+## Phase 2: De Bruijn Operations (shift, substitute)
+
+### Step 2.1 — Implement `shift`
+```haskell
+shift :: Int -> Text -> Int -> Expr -> Expr
+-- shift d x m e: shift variable x by d, starting at index >= m
+```
+
+Following the specification in README.md exactly.
+
+**Tests (unit):**
+- `shift 1 "x" 0 (EVar (Var "x" 0))` == `EVar (Var "x" 1)`
+- `shift 1 "x" 0 (EVar (Var "y" 0))` == `EVar (Var "y" 0)` (different name)
+- `shift 1 "x" 1 (EVar (Var "x" 0))` == `EVar (Var "x" 0)` (below threshold)
+- Lambda same-name: `shift 1 "x" 0 (ELam "x" A b)` increments threshold for body
+- Lambda different-name: `shift 1 "x" 0 (ELam "y" A b)` does not increment threshold
+- Forall same-name / different-name (analogous)
+- Let same-name / different-name (analogous)
+- Nested lambdas with shadowing
+- The complex example from README:
+  `λ(x:Nat) → λ(y:Nat) → λ(x:Nat) → x + x@1 + x@2` after appropriate shifts
+
+**Tests (QuickCheck):**
+- `shift 0 x 0 e == e` for all names x and expressions e
+- `shift d x m (shift (-d) x m e) == e` (round-trip, when valid)
+
+### Step 2.2 — Implement `substitute`
+```haskell
+substitute :: Var -> Expr -> Expr -> Expr
+-- substitute v replacement target: replace v with replacement in target
+```
+
+Following the Dhall standard adapted to microFω.
+
+**Tests (unit):**
+- Simple variable substitution: `substitute (Var "x" 0) (ELit 5) (EVar (Var "x" 0))` == `ELit 5`
+- No substitution for different variable
+- Substitution under lambda with same name (threshold adjustment)
+- The README example:
+  `(λ(x:Nat) → λ(y:Nat) → λ(x:Nat) → x + x@1 + x@2) y`
+  evaluates to `λ(y:Nat) → λ(x:Nat) → x + y@1 + x@1`
+
+**Tests (QuickCheck):**
+- Substituting a variable not present in expression is identity
+- Substituting then shifting back is consistent
+
+---
+
+## Phase 3: Parser (Megaparsec — Primary)
+
+### Step 3.1 — Lexer foundations
+Create `src/MuFomega/Parser/Megaparsec.hs`:
+- Whitespace consumer (spaces, tabs, newlines, `--` line comments)
+- `lexeme` combinator
+- `symbol` combinator
+
+**Tests:**
+- Whitespace is consumed correctly including comments
+- `-- comment\n` is consumed as whitespace
+- `\r\n` is valid end-of-line
+
+### Step 3.2 — Parse atoms: natural literals, builtins, variables
+- `naturalLiteral`: parse `0`, `1`..`9` followed by digits; no leading zeros
+- `builtin`: parse `Natural`, `Natural/fold`, `Natural/subtract`, `Type`, `Kind`
+- `variable`: parse `label` optionally followed by `@` and natural literal
+- `label`: first char is ALPHA or `_`, rest is ALPHANUM or `-` or `/` or `_`
+- `nonreservedLabel`: label that is not a keyword (`let`, `in`, `forall`)
+- Negative lookahead: `builtin` must not be followed by `label-next-char`
+
+**Tests:**
+- Parse each builtin: `"Natural"`, `"Natural/fold"`, `"Natural/subtract"`, `"Type"`, `"Kind"`
+- Parse natural literals: `"0"`, `"1"`, `"42"`, `"1000000"`
+- Reject leading zeros: `"01"` parses as `0` followed by `1` (separate tokens)
+- Parse variables: `"x"`, `"x@0"`, `"x@1"`, `"foo_bar"`, `"my-var"`
+- Keywords are not valid variable names: `"let"` alone fails as variable
+- `"letter"` is a valid variable (starts with keyword but has more chars)
+- `"Natural_"` is a valid variable (builtin followed by label-next-char)
+- Unicode: `"∀"` and `"λ"` are operators not identifiers
+
+### Step 3.3 — Parse expressions (full grammar)
+- `expression`: lambda, let, forall, arrow shorthand, annotated
+- `annotatedExpression`: `operatorExpression [ ":" expression ]`
+- `letBinding`: `let label "=" expression`
+- `operatorExpression` → `plusExpression`
+- `plusExpression`: `timesExpression *("+" timesExpression)` (left-assoc)
+- `timesExpression`: `applicationExpression *("*" applicationExpression)` (left-assoc)
+- `applicationExpression`: `primitiveExpression *(primitiveExpression)` (left-assoc)
+- `primitiveExpression`: natural literal, identifier, `"(" expression ")"`
+- Lambda: `λ "(" nonreservedLabel ":" expression ")" "→" expression`
+- Forall: `∀ "(" nonreservedLabel ":" expression ")" "→" expression`
+- Arrow shorthand: `operatorExpression "→" expression` (with backtracking)
+
+**Tests (unit, comprehensive):**
+- Single natural: `"123"` → `ELit 123`
+- Simple variable: `"x"` → `EVar (Var "x" 0)`
+- Variable with index: `"x@2"` → `EVar (Var "x" 2)`
+- Builtin: `"Type"` → `EBuiltin BType`
+- Lambda: `"λ(x : Natural) → x"` → `ELam "x" (EBuiltin BNatural) (EVar (Var "x" 0))`
+- Also with backslash: `"\\(x : Natural) -> x"`
+- Forall: `"∀(a : Type) → a"` → `EForall "a" (EBuiltin BType) (EVar (Var "a" 0))`
+- Also with keyword: `"forall(a : Type) -> a"`
+- Arrow shorthand: `"Natural -> Natural"` → `EForall "_" (EBuiltin BNatural) (EBuiltin BNatural)`
+- Let expression: `"let x = 1 in x"` → `ELet "x" (ELit 1) (EVar (Var "x" 0))`
+- Chained lets without `in`: `"let x = 1 let y = 2 in x"` → nested ELet
+- Annotation: `"x : Natural"` → `EAnnot (EVar ...) (EBuiltin BNatural)`
+- Plus: `"1 + 2"` → `EPlus (ELit 1) (ELit 2)`
+- Times: `"3 * 4"` → `ETimes (ELit 3) (ELit 4)`
+- Precedence: `"1 + 2 * 3"` → `EPlus (ELit 1) (ETimes (ELit 2) (ELit 3))`
+- Application: `"f x y"` → `EApp (EApp (EVar f) (EVar x)) (EVar y)`
+- Application vs times: `"f x * g y"` → `ETimes (EApp f x) (EApp g y)`
+- Parenthesized: `"(1 + 2) * 3"` → `ETimes (EPlus ...) (ELit 3)`
+- Nested lambda: `"λ(x : Natural) → λ(y : Natural) → x + y"`
+- The full README example program (parses without error, produces expected AST)
+- **Edge cases:**
+  - Empty parens: `"()"` → parse error
+  - Missing type annotation in lambda: `"λ(x) → x"` → parse error
+  - Trailing input: `"1 + 2 xyz"` → parse error (or partial parse depending on strategy)
+  - Deeply nested parens: `"((((1))))"` → `ELit 1`
+  - Comments: `"1 + -- comment\n 2"` → `EPlus (ELit 1) (ELit 2)`
+  - Unicode arrow vs ASCII: both `→` and `->` work
+  - Unicode lambda vs backslash: both `λ` and `\` work
+
+### Step 3.4 — Parse the full README example
+Parse the complete program from README and verify the AST structure.
+
+```
+let f = λ(x : Natural) → λ(x : Natural) → (123 + x) * x@1
+let id = λ(a : Type) → λ(x : a) → x
+let type_of_id = ∀(a : Type) → a → a
+let _ = id : type_of_id
+let _ = type_of_id : Type
+let _ = Type : Kind
+let Void = ∀(r : Type) → r
+let Unit = ∀(r : Type) → r → r
+let Pair = λ(a : Type) → λ(b : Type) → ∀(r : Type) → (a → b → r) → r
+in f (Natural/subtract 2 10) (id Natural 20)
+```
+
+**Tests:**
+- Parsing succeeds
+- Top-level structure is a chain of `ELet` nodes
+- Final body is `EApp (EApp f ...) ...`
+- Spot-check several sub-expressions for correctness
+
+---
+
+## Phase 4: Pretty-Printer
+
+### Step 4.1 — Implement precedence-based pretty-printer
+Create `src/MuFomega/PrettyPrint.hs`:
+- Define outer and inner precedence for each `Expr` constructor per README spec:
+  - Literals, builtins, variables: outer = 0
+  - Application `EApp`: outer = 5, inner = 4 for both args
+  - Times `ETimes`: outer = 10, inner = 10
+  - Plus `EPlus`: outer = 20, inner = 20
+  - Annotation `EAnnot body tipe`: outer = 8, inner body = 7, inner tipe = 8
+  - Lambda/Forall/Let: outer = 50, inner (body) = 50, inner (type/value) = 50 (or 100 as standalone)
+- `prettyPrint :: Expr -> Text`
+- `prettyPrintPrec :: Int -> Expr -> Text` (with enclosing inner precedence)
+
+**Tests:**
+- `prettyPrint (ELit 42)` == `"42"`
+- `prettyPrint (EPlus (ELit 1) (ELit 2))` == `"1 + 2"`
+- `prettyPrint (ETimes (ELit 3) (EPlus (ELit 1) (ELit 2)))` == `"3 * (1 + 2)"`
+- `prettyPrint (EPlus (ELit 1) (ETimes (ELit 2) (ELit 3)))` == `"1 + 2 * 3"` (no parens needed)
+- Application: `prettyPrint (EApp f (EApp g x))` == `"f (g x)"`
+- Application left-assoc: `prettyPrint (EApp (EApp f x) y)` == `"f x y"`
+- Lambda: `prettyPrint (ELam "x" Nat body)` == `"λ(x : Natural) → ..."`
+- Annotation chaining: `"(123 : Natural) : Natural"` for nested annotations from left
+- But `"1 + 2 : Natural : Type"` (EAnnot (EAnnot (EPlus 1 2) Natural) Type) needs parens around `1 + 2`
+
+### Step 4.2 — Round-trip property: parse ∘ prettyPrint ∘ parse == parse
+**Tests (QuickCheck):**
+- For any well-formed `Expr` (from the `Arbitrary` instance):
+  `parse (prettyPrint e) == Right e`
+- This is the gold standard round-trip test
+
+---
+
+## Phase 5: Alpha-Normalization
+
+### Step 5.1 — Implement alpha-normalization
+Create `src/MuFomega/Alpha.hs`:
+- Rename all bound variables to `_`, introducing de Bruijn indices as needed
+- Track a mapping from old names to de Bruijn depth
+
+```haskell
+alphaNormalize :: Expr -> Expr
+```
+
+**Tests (unit):**
+- `λ(x : Natural) → x` → `λ(_ : Natural) → _`
+- `λ(a : Type) → λ(b : Type) → a` → `λ(_ : Type) → λ(_ : Type) → _@1`
+- `λ(x : Type) → _` → `λ(_ : Type) → _@1`
+- Identity function is already normalized: `λ(_ : Natural) → _`
+- Free variables are not renamed: `x` stays `x`
+- Nested lets: `let x = 1 in let y = 2 in x + y` → `let _ = 1 in let _ = 2 in _@1 + _`
+
+**Tests (QuickCheck):**
+- Alpha-normalization is idempotent: `alphaNormalize (alphaNormalize e) == alphaNormalize e`
+
+---
+
+## Phase 6: Beta-Normalization (Evaluation)
+
+### Step 6.1 — Implement basic beta-normalization (named variables, direct substitution)
+Create `src/MuFomega/Eval.hs`:
+
+```haskell
+betaNormalize :: Expr -> Expr
+```
+
+Rules per README:
+- `EApp (ELam x _ body) arg` → substitute `x` with `arg` in `body`, then normalize
+- `ELet x val body` → substitute `x` with `val` in `body`, then normalize
+- `EPlus` / `ETimes`: evaluate operands, apply arithmetic if both are `ELit`
+- `EBuiltin BNaturalSubtract` applied to two args: `Natural/subtract a b` = `max 0 (b - a)`
+- `EBuiltin BNaturalFold` applied to four args: Church-fold over naturals
+- `EAnnot body _` → normalize body (annotations are erased)
+- Normalize under lambdas (symbolic evaluation)
+
+**Tests (unit):**
+- `(λ(x : Natural) → x) 5` → `5`
+- `(λ(x : Natural) → x + 1) 5` → `6`
+- `let x = 5 in x + 1` → `6`
+- `1 + 2` → `3`
+- `3 * 4` → `12`
+- `0 + x` → `x` (symbolic)
+- `x + 0` → `x` (symbolic)
+- `0 * x` → `0`
+- `x * 0` → `0` (if implemented; else symbolic `x * 0`)
+- `Natural/subtract 2 10` → `8`
+- `Natural/subtract 10 2` → `0`
+- `Natural/subtract 0 x` → `x`
+- Nested application: `(λ(f : ...) → f 5) (λ(x : Natural) → x + 1)` → `6`
+- Under lambda: `λ(x : Natural) → (λ(y : Natural) → x + y) 123` → `λ(_ : Natural) → _ + 123`
+- Complex de Bruijn:
+  `(λ(x:Nat) → λ(y:Nat) → λ(x:Nat) → x + x@1 + x@2) y`
+  → `λ(_ : Natural) → λ(_ : Natural) → _ + _@2 + _@1`
+  (after alpha-normalization)
+- The full README example evaluates to `1144`:
+  ```
+  let f = λ(x : Natural) → λ(x : Natural) → (123 + x) * x@1
+  ...
+  in f (Natural/subtract 2 10) (id Natural 20)
+  ```
+  → `1144`
+
+### Step 6.2 — Implement `Natural/fold`
+```
+Natural/fold n T succ zero
+```
+= Apply `succ` to `zero` exactly `n` times.
+
+**Tests:**
+- `Natural/fold 0 Natural (λ(x : Natural) → x + 1) 0` → `0`
+- `Natural/fold 5 Natural (λ(x : Natural) → x + 1) 0` → `5`
+- `Natural/fold 3 Natural (λ(x : Natural) → x * 2) 1` → `8`
+- Church-encoded naturals (used later in benchmarks)
+
+### Step 6.3 — Full normalization = beta + alpha
+```haskell
+normalize :: Expr -> Expr
+normalize = alphaNormalize . betaNormalize
+```
+
+**Tests:**
+- All beta tests above, but with alpha-normalized output
+- Idempotent: `normalize (normalize e) == normalize e`
+
+---
+
+## Phase 7: Type-Checking
+
+### Step 7.1 — Implement type inference / checking
+Create `src/MuFomega/TypeCheck.hs`:
+
+```haskell
+data TypeContext = ...  -- list of (Text, Expr) bindings
+
+typeOf :: TypeContext -> Expr -> Either TypeError Expr
+```
+
+Rules:
+- `ELit _` : type is `Natural`
+- `EBuiltin BNatural` : type is `Type`
+- `EBuiltin BType` : type is `Kind`
+- `EBuiltin BKind` : error (Kind has no type in our system; or we could assign `Sort`)
+- `EBuiltin BNaturalSubtract` : type is `Natural → Natural → Natural`
+- `EBuiltin BNaturalFold` : type is `∀(a : Type) → Natural → a → (a → a) → a`
+  (or the Dhall standard signature)
+- `EVar v` : look up in context
+- `EAnnot body tipe` : check that `typeOf body == normalize tipe`; return `tipe`
+- `ELam x tA body` : `tA` must have type `Type` or `Kind`; extend context with `x : tA`, infer type of `body` = `tB`; return `∀(x : tA) → tB`
+- `EForall x tA tB` : both `tA` and (with `x : tA` in context) `tB` must be `Type` or `Kind`; return appropriate universe
+- `EApp f a` : `typeOf f` must normalize to `∀(x : tA) → tB`; `typeOf a` must equal `normalize tA`; return `substitute x a tB` normalized
+- `EPlus a b` / `ETimes a b` : both operands must have type `Natural`; return `Natural`
+- `ELet x a b` : infer `typeOf a = tA`; extend context with `x : tA`; infer `typeOf b`
+
+**Tests (unit):**
+- `typeOf [] (ELit 5)` == `Right (EBuiltin BNatural)`
+- `typeOf [] (EBuiltin BNatural)` == `Right (EBuiltin BType)`
+- `typeOf [] (EBuiltin BType)` == `Right (EBuiltin BKind)`
+- `typeOf [] (EPlus (ELit 1) (ELit 2))` == `Right (EBuiltin BNatural)`
+- `typeOf [] (EPlus (ELit 1) (EBuiltin BType))` == `Left (TypeMismatch ...)` — type error
+- Lambda: `typeOf [] (ELam "x" Natural (EVar (Var "x" 0)))` == `Right (EForall "x" Natural Natural)`
+- Application: `typeOf [] (EApp (ELam "x" Natural x) (ELit 5))` == `Right Natural`
+- Application type mismatch: applying `λ(x : Natural) → x` to `Type` → error
+- Free variable: `typeOf [] (EVar (Var "x" 0))` == `Left (UnboundVariable ...)`
+- Forall: `typeOf [] (EForall "a" Type (EVar (Var "a" 0)))` == `Right (EBuiltin BType)`
+- The full README example type-checks successfully
+- Annotation: `id : type_of_id` from the README works
+- `type_of_id : Type` works
+- `Type : Kind` works
+
+**Tests (negative / edge cases):**
+- Applying a non-function: `1 2` → type error
+- Wrong argument type: `(λ(x : Natural) → x) Type` → type error
+- Duplicate let bindings with different types: verify scoping is correct
+- Shadowed variables: inner binding takes precedence
+
+---
+
+## Phase 8: Alternative Parser — FlatParse
+
+### Step 8.1 — Implement parser with FlatParse
+Create `src/MuFomega/Parser/FlatParse.hs`:
+- Same grammar, same AST output
+- Use `FlatParse.Stateful` or `FlatParse.Basic`
+- Optimize for speed: avoid backtracking where possible, use `switch` for keywords
+
+**Tests:**
+- ALL tests from Phase 3 must pass identically with the FlatParse parser
+- Shared test module: `test/MuFomega/Parser/SharedTests.hs` parameterized by parser function
+- Both parsers produce identical AST for all test inputs
+
+### Step 8.2 — Parser conformance tests
+**Tests (QuickCheck):**
+- For randomly generated `Expr`, `prettyPrint` then parse with both parsers, results must be identical
+- Parse a large corpus of test expressions with both parsers, compare results
+
+---
+
+## Phase 9: Alternative Evaluation Strategies (NbE)
+
+### Step 9.1 — NbE with HOAS (Higher-Order Abstract Syntax)
+Create `src/MuFomega/Eval/NbE/HOAS.hs`:
+- Semantic domain: lambdas represented as `Value → Value`
+- `eval :: Env -> Expr -> Value`
+- `quote :: Int -> Value -> Expr` (reify back to syntax)
+- `normalize :: Expr -> Expr`
+
+**Tests:**
+- All evaluation tests from Phase 6 must pass
+- Shared test module for evaluation strategies
+
+### Step 9.2 — NbE with named variables (Var name → Term)
+Create `src/MuFomega/Eval/NbE/Named.hs`:
+- Lambdas as `VarName -> Term` closures
+- Same interface as HOAS
+
+**Tests:** Same suite as Step 9.1.
+
+### Step 9.3 — NbE with de Bruijn indices
+Create `src/MuFomega/Eval/NbE/DeBruijn.hs`:
+- Expressions use de Bruijn indices throughout (no names)
+- Conversion from named AST to de Bruijn AST
+- Evaluation in de Bruijn representation
+- Quote back to named representation
+
+**Tests:** Same suite as Step 9.1.
+
+### Step 9.4 — NbE with mixed de Bruijn indices (locally nameless)
+Create `src/MuFomega/Eval/NbE/LocallyNameless.hs`:
+- Bound variables use de Bruijn indices
+- Free variables use names
+- Standard locally-nameless approach
+
+**Tests:** Same suite as Step 9.1.
+
+---
+
+## Phase 10: Performance Benchmarks
+
+### Step 10.1 — Synthetic expression generator
+Create `bench/Generators.hs`:
+- Generate deeply nested lambda expressions
+- Generate deeply nested let expressions
+- Generate large arithmetic expressions (deeply nested `+` and `*`)
+- Generate Church-encoded natural numbers
+- Church arithmetic: `plus`, `times`, `pred`, `minus` for Church numerals
+- Test expression: compute `3^3 = 27` using Church numerals (many operations, small result)
+
+### Step 10.2 — Parser benchmarks
+Create `bench/ParserBench.hs`:
+- Benchmark Megaparsec vs FlatParse on:
+  - Small expressions (< 100 chars)
+  - Medium expressions (1K chars)
+  - Large expressions (10K chars)
+  - Deeply nested parentheses (depth 100, 1000)
+  - Many let bindings (100, 1000)
+- Use Criterion for statistical rigor
+- Report: mean time, std dev, comparison ratio
+
+### Step 10.3 — Evaluator benchmarks
+Create `bench/EvalBench.hs`:
+- Benchmark all evaluation strategies on:
+  - Simple arithmetic: `1 + 2 + 3 + ... + 100` (via nested EPlus)
+  - Church numeral addition: `plus 10 10` (Church-encoded)
+  - Church numeral multiplication: `times 5 5` (Church-encoded)
+  - Fibonacci-like via Natural/fold
+  - Deep beta-reduction: `(λ → (λ → ... )) arg` with depth 100
+  - The README example program
+- Use Criterion
+- Compare: Direct substitution vs NbE(HOAS) vs NbE(Named) vs NbE(DeBruijn) vs NbE(LocallyNameless)
+
+---
+
+## Phase 11: Integration & Polish
+
+### Step 11.1 — CLI executable
+- `app/Main.hs`: Read a microFω program from stdin or file
+- Parse → Type-check → Evaluate → Pretty-print result
+- Error messages with source positions
+- Flag to select parser backend and evaluation strategy
+
+### Step 11.2 — Final test coverage audit
+- Run `./scripts/coverage.sh`
+- Identify any uncovered lines
+- Add tests to reach 100% coverage on all library modules
+
+### Step 11.3 — Documentation
+- Haddock comments on all exported functions
+- Update README with build/test/benchmark instructions
+
+---
+
+## Summary of Test Strategy
+
+| Phase | Module | Test Type | Key Properties |
+|-------|--------|-----------|----------------|
+| 1 | Syntax | Unit + QC | Eq, Show, Arbitrary, exprMap identity |
+| 2 | Shift/Subst | Unit + QC | Correctness per spec, round-trip |
+| 3 | Parser (Megaparsec) | Unit | All grammar productions, edge cases |
+| 4 | PrettyPrint | Unit + QC | Precedence correctness, parse∘print round-trip |
+| 5 | Alpha | Unit + QC | Spec examples, idempotence |
+| 6 | Eval | Unit | Arithmetic, substitution, Natural/fold, full example = 1144 |
+| 7 | TypeCheck | Unit | Well-typed accepted, ill-typed rejected, full example |
+| 8 | Parser (FlatParse) | Unit + QC | Identical results to Megaparsec |
+| 9 | NbE variants | Unit | Identical results to direct substitution |
+| 10 | Benchmarks | Perf | Criterion benchmarks, synthetic generators |
+
+## Dependency Order
+
+```
+Phase 0 (scaffolding)
+  └→ Phase 1 (AST)
+       └→ Phase 2 (shift/substitute)
+       │    └→ Phase 5 (alpha-normalization)
+       │    └→ Phase 6 (beta-normalization) ←→ Phase 7 (type-checking, mutual recursion)
+       └→ Phase 3 (Megaparsec parser)
+       └→ Phase 4 (pretty-printer, depends on AST; tested with parser)
+       └→ Phase 8 (FlatParse parser, depends on Phase 3 tests)
+       └→ Phase 9 (NbE variants, depends on Phase 6 tests)
+  └→ Phase 10 (benchmarks, depends on all implementations)
+  └→ Phase 11 (integration)
+```
+
+Phases 3, 4, and 8 can proceed in parallel with Phases 2, 5, 6, 7.
+Phase 9 can begin once Phase 6 is complete.
+Phase 10 requires all implementations.

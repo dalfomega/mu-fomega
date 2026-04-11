@@ -1,0 +1,18 @@
+In this project, README.md describes what needs to be done. 
+
+The implementation must be in Haskell using stack and cabal and  hpack and the latest haskell compiler (9.14). I already have these tools installed on this machine.
+
+Create a detailed implementation plan that includes implementing step by step the different parts of this project. Each step must be accompanied by full unit tests.  Unit tests must verify all features including edge cases of the grammar and the semantics.
+
+I need to setup the haskell project so that tests can be run automatically (via HSpec / quickcheck) and I need to setup a test coverage tool to make sure that the code is covered by unit tests at 100% coverage.
+
+I also need to setup performance tests: generate large microFω expressions, long deeply nested expressions (to exercise the parser and the evaluator). 
+
+
+An important part of this project is exploration of different implementation techniques:
+
+-  I need to implement the same grammar using different parsing libraries. Megaparsec and flatparse come to mind. The results of parsing must be identical. Performance must be compared by benchmarks.
+
+- I need to implement evaluation using different versions of "Normalization-by-Evaluation" approach. For instance, where lambdas are represented as functions of type Term → Term, or as functions of type Var name → Term, or via de Bruijn indices, or mixed de Bruijn indices (for bound variables) and variable names (for free variables).
+
+Different approaches to evaluation should be all benchmarked by running on synthetic tests: arithmetic with Church-encoded natural numbers for example (implement plus, times, and calculate something that takes many operations but does not produce large natural numbers at any stage).

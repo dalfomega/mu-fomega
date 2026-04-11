@@ -1,0 +1,493 @@
+# microFω Implementation Plan
+
+## Project Overview
+
+Implement **microFω**, a subset of Dhall, in Haskell (GHC 9.14.1) using Cabal + Hpack. The project covers parsing, pretty-printing, shift/substitution, evaluation (alpha- and beta-normalization), and type-checking. Multiple parsing libraries (Megaparsec, FlatParse) and multiple evaluation strategies (NbE with different variable representations) are explored and benchmarked.
+
+## Project Structure
+
+```
+mu-fomega/
+├── package.yaml              # Hpack project config
+├── cabal.project              # Cabal project file
+├── cabal.project.local       # Local cabal configuration (user-specific)
+├── app/
+│   └── Main.hs                # CLI entry point
+├── src/
+│   ├── MicroFomega/
+│   │   ├── Syntax.hs          # Expr AST + smart constructors
+│   │   ├── Pretty.hs          # Precedence-based pretty-printer
+│   │   ├── Shift.hs           # De Bruijn shift operation
+│   │   ├── Substitute.hs      # Variable substitution
+│   │   ├── Normalize.hs       # Alpha- & beta-normalization
+│   │   ├── Typecheck.hs       # Unidirectional type-checker
+│   │   ├── Parser/
+│   │   │   ├── Megaparsec.hs  # Megaparsec parser
+│   │   │   └── FlatParse.hs   # FlatParse parser
+│   │   ├── Eval/
+│   │   │   ├── NbE.hs         # NbE: lambdas as Term → Term
+│   │   │   ├── NbEName.hs    # NbE: lambdas as Var name → Term
+│   │   │   ├── NbEDeBruijn.hs# NbE: pure de Bruijn indices
+│   │   │   └── NbEMixed.hs   # NbE: mixed de Bruijn + names
+│   │   └── Builtin.hs         # Built-in constants & operations
+│   └── MicroFomega.hs         # Re-export module
+├── test/
+│   ├── Spec.hs                # HSpec main entry
+│   ├── MicroFomega/
+│   │   ├── SyntaxSpec.hs
+│   │   ├── PrettySpec.hs
+│   │   ├── ShiftSpec.hs
+│   │   ├── SubstituteSpec.hs
+│   │   ├── NormalizeSpec.hs
+│   │   ├── TypecheckSpec.hs
+│   │   ├── Parser/
+│   │   │   ├── MegaparsecSpec.hs
+│   │   │   ├── FlatParseSpec.hs
+│   │   │   └── ParserEquivalenceSpec.hs  # Cross-parser equivalence
+│   │   ├── Eval/
+│   │   │   ├── NbESpec.hs
+│   │   │   ├── NbENameSpec.hs
+│   │   │   ├── NbEDeBruijnSpec.hs
+│   │   │   └── NbEMixedSpec.hs
+│   │   └── Gen.hs             # QuickCheck generators for Expr
+│   └── MicroFomega/
+│       └── Perf/              # Performance / large-expression tests
+│           ├── Generator.hs   # Generate large synthetic expressions
+│           └── PerfSpec.hs    # HSpec-based perf tests
+├── bench/
+│   ├── ParserBench.hs         # Criterion benchmarks: Megaparsec vs FlatParse
+│   ├── EvalBench.hs           # Criterion benchmarks: NbE variants
+│   └── PerfBench.hs           # Criterion benchmarks: large expressions
+└── .hpc/                      # Coverage output (gitignored)
+```
+
+---
+
+## Implementation Steps
+
+### Step 1: Project Scaffold
+
+- Create `package.yaml` with Hpack configuration:
+  - Library exposing all `MicroFomega.*` modules
+  - Executable `microfomega-exe` from `app/Main.hs`
+  - Test suite `microfomega-test` (type: `hspec`) depending on `hspec`, `QuickCheck`, `hspec-quickcheck`
+  - Benchmark suite `microfomega-bench` depending on `criterion`
+  - Dependencies: `megaparsec`, `flatparse`, `prettyprinter`, `containers`, `text`, `deepseq`
+  - `ghc-options` including `-fhpc` for coverage (conditionally via cabal flag or separate profile stanza)
+- Create `cabal.project`
+- Create `scripts/build.sh` — builds the project using cabal
+- Create `scripts/test.sh` — runs tests using cabal
+- Create `scripts/bench.sh` — runs benchmarks using cabal
+- Verify build, test, and bench scripts run successfully with empty modules
+
+### Step 2: AST (`Syntax.hs`) + Tests
+
+**Implementation:**
+- Define the `Expr` algebraic data type with 9 constructors matching the grammar:
+  ```haskell
+  data Expr
+    = NaturalLit Natural        -- 1. constant number
+    | Builtin Builtin           -- 2. builtin symbol (Type, Kind, Natural, Natural/fold, Natural/subtract)
+    | Var Text Natural          -- 3. variable with optional de Bruijn index (x@n)
+    | Annot Expr Expr           -- 4. annotated expression (e : t)
+    | Lambda Text Expr Expr     -- 5. lambda: λ(x : t) → b
+    | Pi Text Expr Expr         -- 6. function type: ∀(x : t) → b
+    | Let Text Expr Expr        -- 7. let: let x = a in b
+    | App Expr Expr             -- 8. application: f a
+    | BinOp BinOp Expr Expr     -- 9. binary op: a + b, a * b
+  ```
+- `Builtin` enum: `Type`, `Kind`, `NaturalType`, `NaturalFold`, `NaturalSubtract`
+- `BinOp` enum: `Plus`, `Times`
+- `NFData`, `Eq`, `Show` instances
+- Smart constructors for convenience
+- QuickCheck `Arbitrary` instance for `Expr` (in `test/MicroFomega/Gen.hs`)
+
+**Unit Tests (`SyntaxSpec.hs`):**
+- Construct each constructor, verify `show` output
+- `Eq` reflexivity & symmetry for all constructors
+- QuickCheck: round-trip properties on `Eq` (e.g., `x == x`)
+- Edge cases: `NaturalLit 0`, `Var "x" 0`, `Var "x" maxBound` (or large indices)
+- Verify `Builtin` values are distinct
+
+### Step 3: Pretty-Printer (`Pretty.hs`) + Tests
+
+**Implementation:**
+- Precedence table derived from the README examples:
+  | Constructor    | Outer | Inner (per arg)                          |
+  |---------------|-------|-----------------------------------------|
+  | NaturalLit    | 0     | -                                       |
+  | Builtin       | 0     | -                                       |
+  | Var           | 0     | -                                       |
+  | Annot         | 7     | body: 8, type: 8                        |
+  | Lambda        | 50    | param-type: 100, body: 50              |
+  | Pi            | 50    | param-type: 100, body: 50              |
+  | Let           | 50    | def: 100, body: 50                     |
+  | App            | 5     | func: 4, arg: 4                         |
+  | BinOp Plus   | 20    | left: 20, right: 20                    |
+  | BinOp Times  | 10    | left: 10, right: 10                    |
+- Function `prettyExpr :: Expr -> Text` (or using `prettyprinter` library for Doc)
+- Function `needsParens :: Int -> Int -> Bool` — parentheses when outer > inner
+- Print standalone with inner precedence 100 (no outer parens)
+- Handle `_@n` notation: only print index if > 0
+- Handle `forall` / `λ` / `→` / `+` / `*` syntax
+
+**Unit Tests (`PrettySpec.hs`):**
+- Example from README: `let f = ... in f (Natural/subtract 2 10) (id Natural 20)` → prints correctly
+- Parenthesization tests:
+  - `a * (b + c)` — parens around plus inside times
+  - `a + b * c` — no parens (times binds tighter)
+  - `(a + b) * f (g c)` — parens around plus, no parens around app inside times
+  - `f a (b + c) * d` — no parens around app, parens around plus
+  - `λ(a : Natural) → λ(b : Natural) → f a + b` — no parens
+  - `(123 : Natural) : Natural` — inner annot gets parens
+  - `(1 + 2) : Natural : Type` — plus gets parens, annot doesn't
+- Round-trip: `parse (pretty e) == e` (deferred until parser is done)
+- QuickCheck: for any `e`, `pretty e` must be a valid expression (parsable)
+- Edge: `NaturalLit 0`, `Var "_" 1`, nested annotations
+
+### Step 4: Shift Operation (`Shift.hs`) + Tests
+
+**Implementation:**
+- `shift :: Int -> Text -> Natural -> Expr -> Expr`
+  - `d`: +1 or -1 (increment/decrement)
+  - `x`: variable name to shift
+  - `m`: minimum index threshold
+  - Recurse over all 9 expression forms
+  - For `Var x n`: if `x == varName && n >= m`, shift to `n + d`; otherwise unchanged
+  - For `Lambda x t b` / `Pi x t b` / `Let x a b`: increment `m` when descending into body if `x == varName`
+  - Map-like helper for recursive descent on non-binding forms
+
+**Unit Tests (`ShiftSpec.hs`):**
+- README example: `shift(-1, "x", 1, λ(y:Nat)→λ(x:Nat)→x+x@1+x@2)` = `λ(y:Nat)→λ(x:Nat)→x+y@1+x@1`
+- Shift variable that doesn't match: no change
+- Shift with threshold > 0: lower indices unchanged
+- Shift increment (+1) on simple lambda
+- Shift decrement (-1) on nested lambdas with shadowing
+- QuickCheck: `shift 1 x 0 e` then `shift (-1) x 0 result == e` (round-trip where valid)
+- Edge: shift on `NaturalLit`, `Builtin`, `App`, `BinOp` (just recurse)
+- Shift with different variable names in lambda/let/pi (no m increment)
+
+### Step 5: Substitution (`Substitute.hs`) + Tests
+
+**Implementation:**
+- `substitute :: Text -> Natural -> Expr -> Expr -> Expr`
+  - Replace `x@n` with `e` in the target expression
+  - Uses `shift` to adjust indices when entering/exiting binding scopes
+  - Steps: shift the substituted expression up by 1 before insertion, substitute, then shift result down by 1
+
+**Unit Tests (`SubstituteSpec.hs`):**
+- Simple: `substitute "x" 0 (NaturalLit 5) (BinOp Plus (Var "x" 0) (NaturalLit 3))` = `5 + 3`
+- Shadowing: substitute under lambda with same variable name
+- Free variable handling: substitute expression with free vars correctly shifts indices
+- README example: `(λ(x:Nat)→λ(y:Nat)→λ(x:Nat)→x+x@1+x@2) y` → verify
+- QuickCheck: substitute then verify no `x@n` remains at the target level
+- Edge: substitute into `Let`, `Pi`, `Annot`
+
+### Step 6: Parsers (Megaparsec + FlatParse) + Tests
+
+**Implementation (Megaparsec — `Parser/Megaparsec.hs`):**
+- Implement full grammar from README using `Text.Megaparsec`
+- Lexer: whitespace, comments, natural-literal, labels, keywords, builtins, operators
+- Expression parser with correct precedence (arrow > annotation > plus > times > application > primitive)
+- Handle `let`-chains (multiple let-bindings without `in`)
+- Handle `forall`-shorthand (`a -> b` = `forall (_ : a) -> b`)
+- Backtracking for `operator-expression arrow expression` vs `annotated-expression`
+- Return `Expr`
+
+**Implementation (FlatParse — `Parser/FlatParse.hs`):**
+- Same grammar, same output type, using `FlatParse.Basic`
+- Must produce identical parse results to Megaparsec parser
+
+**Unit Tests (`MegaparsecSpec.hs`, `FlatParseSpec.hs`):**
+- Parse each of the 9 expression forms individually
+- Parse the full example program from README
+- Parse natural literals: `0`, `123`, leading-zero rejection
+- Parse variables: `x`, `x@0`, `x@5`
+- Parse keywords vs labels: `let` is keyword, `letter` is label
+- Parse builtins: `Type`, `Kind`, `Natural`, `Natural/fold`, `Natural/subtract`
+- Parse operators: `λ` vs `\`, `∀` vs `forall`, `→` vs `->`
+- Parse comments: `-- comment\n`
+- Parse nested parens
+- Parse let-chains: `let x = 1 let y = 2 in y`
+- Parse shorthand arrow types: `Natural -> Natural`
+- Error cases: invalid syntax, unclosed parens, invalid tokens
+- QuickCheck: for any `Arbitrary Expr`, `parse (pretty e) == Just e` (round-trip)
+
+**Cross-parser equivalence tests (`ParserEquivalenceSpec.hs`):**
+- QuickCheck: for any valid input, `parseMegaparsec s == parseFlatParse s`
+- Specifically test all edge cases from above
+
+### Step 7: Alpha-Normalization (`Normalize.hs` — alpha part) + Tests
+
+**Implementation:**
+- `alphaNormalize :: Expr -> Expr`
+- Rename all bound variables to `_`
+- Introduce de Bruijn indices to disambiguate `_` clashes
+- Traverse expression, maintaining a map of bound variable names to their replacement `_@n`
+
+**Unit Tests (in `NormalizeSpec.hs`):**
+- `λ(a : Type) → λ(b : Type) → a` → `λ(_ : Type) → λ(_ : Type) → _@1`
+- `λ(x : Type) → _` → `λ(_ : Type) → _@1`
+- No change for free variables
+- Nested let-bindings
+- QuickCheck: alpha-normalization is idempotent (`alphaNormalize (alphaNormalize e) == alphaNormalize e`)
+
+### Step 8: Beta-Normalization (`Normalize.hs` — beta part) + Tests
+
+**Implementation:**
+- `betaNormalize :: Expr -> Expr`
+- Small-step semantics as specified in README
+- Rules for:
+  - `App (Lambda ...) arg`: substitute
+  - `App (Builtin NaturalFold) ...`: evaluate built-in
+  - `App (Builtin NaturalSubtract) ...`: evaluate built-in
+  - `BinOp Plus a b`: evaluate when both are `NaturalLit`
+  - `BinOp Times a b`: evaluate when both are `NaturalLit`
+  - Recursive descent for all other forms
+- `normalize :: Expr -> Expr` = alphaNormalize . betaNormalize
+
+**Unit Tests (in `NormalizeSpec.hs`):**
+- `(λ(y : Natural) → x + 10) 123` → `133`
+- `λ(x : Natural) → (λ(y : Natural) → x + y) 123` → `λ(_ : Natural) → _ + 123`
+- Natural/fold and Natural/subtract evaluation
+- `0 + n = n`, `n + 0 = n`, `m + n = add m n`
+- `0 * n = 0`, `n * 0 = 0`, `m * n = mul m n`
+- Full example program evaluates to `1144`
+- QuickCheck: `betaNormalize (betaNormalize e) == betaNormalize e` (idempotent / confluence)
+- Symbolic evaluation: evaluate under lambda with free variables
+- Edge: deeply nested applications, large natural numbers
+
+### Step 9: Type-Checker (`Typecheck.hs`) + Tests
+
+**Implementation:**
+- `typeOf :: Context -> Expr -> Either TypeError Expr`
+  - `Context` = `[(Text, Expr)]` — variable name to type mapping
+  - `TypeError` with informative error messages
+- Unidirectional type-checking rules:
+  - `NaturalLit _ : Natural`
+  - `Builtin Type : Kind`
+  - `Builtin Kind : Kind` (if supported, or error)
+  - `Builtin Natural : Type`
+  - `Builtin NaturalFold : Natural → ∀(r : Type) → (Natural → r → r) → r → r`
+  - `Builtin NaturalSubtract : Natural → Natural → Natural`
+  - `Var x n`: look up in context
+  - `Lambda x t b`: check `t` is a type, extend context with `x : t`, check `b`
+  - `Pi x t b`: check `t : Kind` or `t : Type`, extend context, check `b : Kind/Type`
+  - `Let x a b`: infer type of `a`, extend context, check `b`
+  - `App f a`: infer `f : Pi x t b`, check `a : t` (using beta-normalization for type equality)
+  - `BinOp Plus a b`: check `a : Natural`, `b : Natural`, result `Natural`
+  - `BinOp Times a b`: same as Plus
+  - `Annot e t`: infer type of `e`, verify it equals `t` (via beta-normalization)
+- Type equality via beta-normalization
+
+**Unit Tests (`TypecheckSpec.hs`):**
+- Well-typed expressions: all 9 constructors with correct types
+- Full example program: type-checks successfully
+- Type errors:
+  - `+` applied to non-Natural
+  - Application of non-function
+  - Undefined variable
+  - `Kind : Kind` (if not supported)
+  - Mismatched annotation
+- De Bruijn index scope checking
+- `let id = λ(a : Type) → λ(x : a) → x` type-checks as `∀(a : Type) → a → a`
+- `Type : Kind` type-checks
+- `Natural : Type` type-checks
+- QuickCheck: well-typed arbitrary expressions pass type-check
+
+### Step 10: NbE Evaluation Variants + Tests
+
+**Implementation:**
+
+Each variant implements a `normalize :: Expr -> Expr` function using a different value representation:
+
+1. **`Eval/NbE.hs`** — Lambdas as `Term → Term` (semantic closures):
+   - `data Value = VNat Natural | VClosure (Value -> Value) | VNeu Neutral | VBuiltin ...`
+   - `evaluate :: Env -> Expr -> Value`
+   - `quote :: Value -> Expr`
+   - Most standard NbE approach
+
+2. **`Eval/NbEName.hs`** — Lambdas as `Var name → Term` (named closures):
+   - `data Value = VNat Natural | VClosure Text Env Expr | ...`
+   - Closures carry environment + body, apply by extending env
+   - Quote produces named variables
+
+3. **`Eval/NbEDeBruijn.hs`** — Pure de Bruijn indices:
+   - Variables are just indices, no names in core representation
+   - `data Value = VNat Natural | VClosure Env Expr | VVar Int | ...`
+   - Quote restores names (as `_@n`)
+
+4. **`Eval/NbEMixed.hs`** — Mixed de Bruijn + names:
+   - Bound variables use de Bruijn indices
+   - Free variables use names
+   - `data Value = VNat Natural | VClosure Env Expr | VFree Text | VBound Int | ...`
+
+**Unit Tests (`NbESpec.hs`, `NbENameSpec.hs`, `NbEDeBruijnSpec.hs`, `NbEMixedSpec.hs`):**
+- All variants must produce the same normalized output as the substitution-based normalizer from Step 8
+- Full example program: all produce `1144`
+- Symbolic evaluation: `λ(x : Natural) → x + y` under lambda
+- Church-encoded natural numbers:
+  - Define `zero`, `succ`, `plus`, `times` as microFω expressions
+  - Evaluate `plus zero zero = zero`, `times (succ zero) (succ zero) = succ (succ zero)`
+  - Compute `2 + 3 = 5`, `3 * 4 = 12`
+- QuickCheck: for arbitrary well-typed expressions, all 4 NbE variants agree
+- Verify results match `Normalize.betaNormalize`
+
+### Step 11: Performance Tests + Benchmarks
+
+**Implementation:**
+
+**Synthetic expression generator (`test/MicroFomega/Perf/Generator.hs`):**
+- `deepNest :: Int -> Expr` — deeply nested lambdas/applications
+- `churchNat :: Int -> Expr` — Church-encoded natural number N
+- `bigAdd :: Int -> Expr` — compute M + N via Church numerals
+- `bigMul :: Int -> Expr` — compute M * N via Church numerals
+- `wideApp :: Int -> Expr` — wide application chain `f a1 a2 ... an`
+- `deepLet :: Int -> Expr` — deeply nested let-expressions
+
+**HSpec-based performance tests (`PerfSpec.hs`):**
+- Run each generator at various sizes, measure wall-clock time
+- Set generous timeouts; fail on excessive slowdowns
+- Verify correctness of results alongside timing
+
+**Criterion benchmarks (`bench/`):**
+- `ParserBench.hs`: Megaparsec vs FlatParse on same inputs
+  - Small/medium/large expressions
+  - Deeply nested, wide applications, large literals
+- `EvalBench.hs`: 4 NbE variants + substitution normalizer
+  - Church-encoded arithmetic (plus, times at various sizes)
+  - Deeply nested lambda evaluation
+- `PerfBench.hs`: Large synthetic expressions
+  - Parsing + evaluation pipeline at scale
+
+### Step 12: Test Coverage Configuration
+
+**Implementation:**
+- Add a cabal flag or profile stanza enabling `-fhpc` in `ghc-options`
+- Add `cabal test --enable-coverage` target (GHC 9.14 uses `--enable-coverage` which replaces `--enable-library-coverage`)
+- Ensure `.hpc/` is in `.gitignore` (already is)
+- Write a script or Makefile target `coverage` that:
+  1. Runs tests with coverage enabled: `cabal test --enable-coverage`
+  2. Generates HTML report: `hpc markup --hpcdir=.hpc microFomega-test`
+  3. Verifies 100% coverage (or reports uncovered lines)
+- Exclude benchmark code from coverage (benchmarks don't need coverage)
+
+**Coverage verification in CI / test script:**
+- Parse HPC report output
+- Fail if any module has < 100% coverage
+- Allow explicit exceptions for unreachable code if any
+
+### Step 13: CLI Application (`app/Main.hs`)
+
+**Implementation:**
+- Read file or stdin
+- Parse using selected parser (default Megaparsec, flag for FlatParse)
+- Type-check
+- Normalize (substitution-based default, flag for NbE variant)
+- Pretty-print result
+- Error reporting with source positions
+
+---
+
+## Test Coverage Strategy
+
+- Every module gets a corresponding `*Spec.hs` test file
+- **QuickCheck generators** (`test/MicroFomega/Gen.hs`):
+  - `Arbitrary Expr` with controlled size (to avoid infinite expressions)
+  - `Arbitrary Builtin`, `Arbitrary BinOp`
+  - Well-typed expression generators (for type-checker and NbE tests)
+  - Valid string generators matching the grammar (for parser tests)
+- **Edge cases** covered explicitly (not just via QuickCheck):
+  - `0` natural literal, leading-zero rejection
+  - `x@0` vs `x` equivalence
+  - Shadowed variables at various depths
+  - Empty typing context
+  - Type vs Kind distinction
+  - `Natural/fold` and `Natural/subtract` with edge arguments (0, large numbers)
+- **Parser equivalence**: QuickCheck verifies both parsers agree on all valid inputs
+- **NbE equivalence**: QuickCheck verifies all NbE variants + substitution normalizer agree
+- **Round-trip tests**: `parse (pretty e) == e` for all `Arbitrary Expr`
+
+## Benchmark Comparison Plan
+
+| Benchmark | Megaparsec | FlatParse | Ratio |
+|-----------|-----------|-----------|-------|
+| Small expr parse | TBD | TBD | TBD |
+| Medium expr parse | TBD | TBD | TBD |
+| Large expr parse | TBD | TBD | TBD |
+| Deeply nested | TBD | TBD | TBD |
+
+| Benchmark | NbE(Term→Term) | NbE(Var→Term) | NbE(de Bruijn) | NbE(Mixed) | Subst |
+|-----------|----------------|---------------|----------------|-------------|-------|
+| Church plus N | TBD | TBD | TBD | TBD | TBD |
+| Church times N | TBD | TBD | TBD | TBD | TBD |
+| Deep lambda N | TBD | TBD | TBD | TBD | TBD |
+
+## Dependencies Summary
+
+```yaml
+dependencies:
+  - base >= 4.20
+  - text
+  - containers
+  - deepseq
+  - prettyprinter
+
+test-dependencies:
+  - hspec
+  - QuickCheck
+  - hspec-quickcheck
+
+benchmark-dependencies:
+  - criterion
+
+parser-dependencies:
+  - megaparsec    # src only
+  - flatparse     # src only
+```
+
+---
+
+## Build, Test, and Benchmark Scripts
+
+### `scripts/build.sh`
+
+```bash
+#!/usr/bin/env bash
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "Building microFω..."
+cabal build all
+
+echo "Build complete."
+```
+
+### `scripts/test.sh`
+
+```bash
+#!/usr/bin/env bash
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "Running tests..."
+cabal test all "$@"
+
+echo "Tests complete."
+```
+
+### `scripts/bench.sh`
+
+```bash
+#!/usr/bin/env bash
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "Running benchmarks..."
+cabal bench all "$@"
+
+echo "Benchmarks complete."
+```
