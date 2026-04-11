@@ -136,7 +136,7 @@ parseFlatOrDie input =
     Left _ -> error "FlatParse parser failed on generated workload"
 
 scalingDepths :: [Int]
-scalingDepths = [1000, 2000, 3000]
+scalingDepths = [10000, 20000, 30000]
 
 benchDepths :: [Int]
-benchDepths = [1000, 2000, 3000]
+benchDepths = [10000, 20000, 30000]

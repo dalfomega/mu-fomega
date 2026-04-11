@@ -19,12 +19,6 @@ newtype Doc = Doc Builder
 runDoc :: Doc -> Builder
 runDoc (Doc b) = b
 
-instance Semigroup Doc where
-  Doc a <> Doc b = Doc (a <> b)
-
-instance Monoid Doc where
-  mempty = Doc mempty
-
 class ToDoc a where
   toDoc :: Int -> a -> Doc
 
@@ -47,27 +41,27 @@ instance ToDoc ExprLazy where
     EBuiltin b -> toDoc outer b
     EVar v -> toDoc outer v
     EAnnot body tipe ->
-      parenIf (8 > outer) outer $
+      parenIf (8 > outer) $
         Doc (runDoc (toDoc 7 body) <> " : " <> runDoc (toDoc 8 tipe))
     ELam name tipe body ->
-      parenIf (50 > outer) outer $
+      parenIf (50 > outer) $
         Doc ("λ(" <> runDoc (fromText name) <> " : " <> runDoc (toDoc 50 tipe) <> ") → " <> runDoc (toDoc 50 body))
     EForall name tipe body ->
-      parenIf (50 > outer) outer $
+      parenIf (50 > outer) $
         Doc ("∀(" <> runDoc (fromText name) <> " : " <> runDoc (toDoc 50 tipe) <> ") → " <> runDoc (toDoc 50 body))
     ELet name value body ->
-      parenIf (50 > outer) outer $
+      parenIf (50 > outer) $
         Doc ("let " <> runDoc (fromText name) <> " = " <> runDoc (toDoc 50 value) <> " in " <> runDoc (toDoc 50 body))
     EApp fn arg ->
-      parenIf (5 > outer) outer $
+      parenIf (5 > outer) $
         Doc (runDoc (toDoc 5 fn) <> " " <> runDoc (toDoc 4 arg))
     EBinOp op lhs rhs ->
       case op of
         Times ->
-          parenIf (10 > outer) outer $
+          parenIf (10 > outer) $
             Doc (runDoc (toDoc 10 lhs) <> " * " <> runDoc (toDoc 10 rhs))
         Plus ->
-          parenIf (20 > outer) outer $
+          parenIf (20 > outer) $
             Doc (runDoc (toDoc 20 lhs) <> " + " <> runDoc (toDoc 20 rhs))
 
 instance ToDoc ExprStrict where
@@ -76,32 +70,32 @@ instance ToDoc ExprStrict where
     SEBuiltin b -> toDoc outer b
     SEVar v -> toDoc outer v
     SEAnnot body tipe ->
-      parenIf (8 > outer) outer $
+      parenIf (8 > outer) $
         Doc (runDoc (toDoc 7 body) <> " : " <> runDoc (toDoc 8 tipe))
     SELam name tipe body ->
-      parenIf (50 > outer) outer $
+      parenIf (50 > outer) $
         Doc ("λ(" <> runDoc (fromText name) <> " : " <> runDoc (toDoc 50 tipe) <> ") → " <> runDoc (toDoc 50 body))
     SEForall name tipe body ->
-      parenIf (50 > outer) outer $
+      parenIf (50 > outer) $
         Doc ("∀(" <> runDoc (fromText name) <> " : " <> runDoc (toDoc 50 tipe) <> ") → " <> runDoc (toDoc 50 body))
     SELet name value body ->
-      parenIf (50 > outer) outer $
+      parenIf (50 > outer) $
         Doc ("let " <> runDoc (fromText name) <> " = " <> runDoc (toDoc 50 value) <> " in " <> runDoc (toDoc 50 body))
     SEApp fn arg ->
-      parenIf (5 > outer) outer $
+      parenIf (5 > outer) $
         Doc (runDoc (toDoc 5 fn) <> " " <> runDoc (toDoc 4 arg))
     SEBinOp op lhs rhs ->
       case op of
         Times ->
-          parenIf (10 > outer) outer $
+          parenIf (10 > outer) $
             Doc (runDoc (toDoc 10 lhs) <> " * " <> runDoc (toDoc 10 rhs))
         Plus ->
-          parenIf (20 > outer) outer $
+          parenIf (20 > outer) $
             Doc (runDoc (toDoc 20 lhs) <> " + " <> runDoc (toDoc 20 rhs))
 
-parenIf :: Bool -> Int -> Doc -> Doc
-parenIf True _ doc = Doc ("(" <> runDoc doc <> ")")
-parenIf False _ doc = doc
+parenIf :: Bool -> Doc -> Doc
+parenIf True doc = Doc ("(" <> runDoc doc <> ")")
+parenIf False doc = doc
 
 fromText :: Text -> Doc
 fromText = Doc . Builder.fromText
