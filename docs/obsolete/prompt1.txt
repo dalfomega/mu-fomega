@@ -1,6 +1,6 @@
 In this project, README.md describes what needs to be done. 
 
-The implementation must be in Haskell using stack and cabal and  hpack and the latest haskell compiler (9.14). I already have these tools installed on this machine.
+The implementation must be in Haskell using  cabal and  hpack and the latest haskell compiler (9.14). I already have these tools installed on this machine.
 
 Create a detailed implementation plan that includes implementing step by step the different parts of this project. Each step must be accompanied by full unit tests.  Unit tests must verify all features including edge cases of the grammar and the semantics.
 

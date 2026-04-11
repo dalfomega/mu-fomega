@@ -1,0 +1,396 @@
+# microFω Implementation Plan — codex53
+
+This plan merges `plan-opus46.txt` and `plan-glm51.txt`, aligns them with `README.md`, and removes inconsistencies.
+
+## Resolved Inconsistencies
+
+1. **Strict vs lazy AST fields**
+   - Implement **both** representations and benchmark them explicitly.
+   - `ExprLazy` uses lazy fields; `ExprStrict` uses strict fields (`!`) for recursive and scalar payloads.
+
+2. **AST shape mismatch (9 expression forms vs constructor count)**
+   - Keep README’s 9 expression categories while representing binary operations with a single constructor:
+     - `EBinOp BinOp Expr Expr` where `BinOp = Plus | Times`.
+   - This avoids the “9 vs 10 constructors” confusion.
+
+3. **Module naming mismatch (`MuFomega` vs `MicroFomega`)**
+   - Use one consistent namespace: `MuFomega`.
+
+4. **Tooling mismatch (`cabal` only vs extra toolchains)**
+   - Standardize on **hpack + cabal only**:
+     - `package.yaml` (hpack)
+     - `cabal.project`
+     - cabal-only scripts.
+
+5. **Pretty-printer precedence conflict for annotations**
+   - Use README-consistent values:
+     - `Annot` outer precedence = `8`
+     - body inner precedence = `7`
+     - type inner precedence = `8`.
+
+6. **`Natural/fold` type/order conflict**
+   - Use application order from README: `Natural/fold n T succ zero`.
+   - Type used in checker:
+     - `Natural → ∀(r : Type) → (r → r) → r → r`.
+
+7. **Universe handling ambiguity (`Kind`)**
+   - Adopt consistent rule set:
+     - `Natural : Type`
+     - `Type : Kind`
+     - `Kind` has no higher type (top sort).
+   - `Type : Kind` must type-check (required by README example).
+
+8. **Parser behavior on leading zeros**
+   - `01` is rejected as a single literal/program parse (not silently accepted).
+
+9. **Cross-parser parity criteria**
+   - Compare AST outputs on success and structured error category on failure.
+   - Do not require byte-identical human-readable error strings.
+
+---
+
+## Target Project Layout
+
+```text
+mu-fomega/
+├── package.yaml
+├── cabal.project
+├── app/
+│   └── Main.hs
+├── src/
+│   ├── MuFomega.hs
+│   └── MuFomega/
+│       ├── Syntax/
+│       │   ├── Common.hs
+│       │   ├── Lazy.hs
+│       │   ├── Strict.hs
+│       │   └── Convert.hs
+│       ├── Traversal.hs
+│       ├── Shift.hs
+│       ├── Substitute.hs
+│       ├── Pretty.hs
+│       ├── Normalize.hs
+│       ├── TypeCheck.hs
+│       ├── Parser/
+│       │   ├── Megaparsec.hs
+│       │   └── FlatParse.hs
+│       └── Eval/
+│           ├── SubstLazy.hs
+│           ├── SubstStrict.hs
+│           ├── NbEHOAS.hs
+│           ├── NbENamed.hs
+│           ├── NbEDeBruijn.hs
+│           └── NbELocallyNameless.hs
+├── test/
+│   ├── Spec.hs
+│   └── MuFomega/
+│       ├── SyntaxSpec.hs
+│       ├── TraversalSpec.hs
+│       ├── ShiftSpec.hs
+│       ├── SubstituteSpec.hs
+│       ├── PrettySpec.hs
+│       ├── NormalizeSpec.hs
+│       ├── TypeCheckSpec.hs
+│       ├── Parser/
+│       │   ├── MegaparsecSpec.hs
+│       │   ├── FlatParseSpec.hs
+│       │   └── EquivalenceSpec.hs
+│       ├── Eval/
+│       │   ├── SubstParitySpec.hs
+│       │   └── NbEParitySpec.hs
+│       ├── Perf/Generator.hs
+│       └── Gen.hs
+├── bench/
+│   ├── ParserBench.hs
+│   ├── EvalBench.hs
+│   ├── StrictVsLazyBench.hs
+│   └── Workloads.hs
+└── scripts/
+    ├── build.sh
+    ├── test.sh
+    ├── bench.sh
+    └── coverage.sh
+```
+
+---
+
+## Implementation Phases
+
+## Phase 0 — Scaffold, Tooling, and Quality Gates
+
+### Step 0.1: Project bootstrap
+- Create hpack project and cabal project (GHC 9.14 compatible).
+- Add dependencies: `text`, `containers`, `mtl`, `megaparsec`, `flatparse`, `prettyprinter`, `deepseq`.
+- Test dependencies: `hspec`, `QuickCheck`, `hspec-quickcheck`, `hspec-megaparsec`.
+- Bench dependencies: `criterion`.
+
+**Tests:**
+- Smoke: `cabal build`, `cabal test`, `cabal bench` pass.
+
+### Step 0.2: Coverage setup
+- Add HPC workflow (`cabal test --enable-coverage`).
+- Generate HTML reports and fail CI when any library module < 100% coverage unless explicitly justified and documented.
+
+**Tests:**
+- `scripts/coverage.sh` generates report and validates threshold.
+
+---
+
+## Phase 1 — Syntax Layer with Dual Strictness
+
+### Step 1.1: Common syntax definitions
+- `Var`, `Builtin`, `BinOp` in `Syntax/Common.hs`.
+- Builtins: `Natural`, `Natural/fold`, `Natural/subtract`, `Type`, `Kind`.
+
+### Step 1.2: Two AST representations
+- `Syntax/Lazy.hs`:
+  - Lazy recursive fields.
+- `Syntax/Strict.hs`:
+  - Strict fields (`!`) for all constructor payloads.
+
+Canonical forms (both reps):
+- literal natural
+- builtin
+- variable (`name@index`, with `@0` implicit in printer)
+- annotation
+- lambda
+- forall
+- let
+- application
+- binary operation (`Plus`/`Times`)
+
+### Step 1.3: Conversion layer
+- `toStrict :: ExprLazy -> ExprStrict`
+- `toLazy :: ExprStrict -> ExprLazy`
+
+**Tests:**
+- Constructor coverage for both ASTs.
+- `toLazy . toStrict == id` and `toStrict . toLazy == id` over generated expressions.
+- NFData forcing tests for both variants.
+
+---
+
+## Phase 2 — Traversal Utilities
+
+### Step 2.1: Generic traversal helpers
+- Implement `mapExpr`/`foldExpr` equivalents for lazy and strict AST.
+- Provide binder-aware traversal utility used by shift/substitute/alpha.
+
+**Tests:**
+- Identity traversal preserves AST.
+- Traversal order and binder depth behavior validated on nested lambda/forall/let examples.
+
+---
+
+## Phase 3 — De Bruijn Core Ops (Shift + Substitute)
+
+### Step 3.1: Shift
+- Implement shift for both ASTs per README rules:
+  - shift only matching symbol and indices `>= m`
+  - increment `m` in binder body when binder name matches shifted symbol
+  - do not increment for binder type/value part.
+
+**Tests:**
+- README-specific examples for lambda/forall/let shadowing.
+- Variable mismatch and threshold edge cases.
+- Property: `shift 0 x m e == e`.
+- Property: guarded inverse (`d` then `-d`) only when no underflow can occur.
+
+### Step 3.2: Substitute
+- Implement capture-avoiding substitution using shift discipline.
+- Provide both lazy and strict implementations.
+
+**Tests:**
+- Direct replacement, no-op replacement, shadowing behavior.
+- README substitution scenario with nested shadowed variables.
+- Parity test: lazy and strict substitution results are equivalent via conversion.
+
+---
+
+## Phase 4 — Megaparsec Parser
+
+### Step 4.1: Lexer + atoms
+- Implement whitespace/comments per README ABNF (`--` comments, `\n`, `\r\n`, tabs).
+- Parse labels, variables (`x`, `x@n`), natural literals (no leading zeros), and builtins.
+- Enforce keyword/builtin disambiguation with lookahead.
+
+### Step 4.2: Expression grammar
+- Implement full precedence and associativity:
+  - application > `*` > `+` > annotation > arrow forms.
+- Support all syntax variants:
+  - `λ` and `\`
+  - `∀` and `forall`
+  - `→` and `->`
+  - let-chains without repeated `in`.
+
+### Step 4.3: Full README program parse
+- Parse the complete sample and validate key AST shape points.
+
+**Tests:**
+- Unit tests for every production and edge case.
+- Reject invalid constructs (`()`, `λ(x) → x`, malformed indices, leading-zero literals).
+- Success parse for complete README example.
+
+---
+
+## Phase 5 — FlatParse Parser
+
+### Step 5.1: FlatParse implementation
+- Implement grammar equivalent to Megaparsec parser.
+
+### Step 5.2: Cross-parser equivalence
+- Compare parse results on a shared corpus + generated inputs.
+- Equivalence includes both success AST identity and failure category parity.
+
+**Tests:**
+- Re-run full parser suite against FlatParse.
+- Property tests for parser equivalence.
+
+---
+
+## Phase 6 — Pretty Printer (README-Correct Precedence)
+
+### Step 6.1: Precedence implementation
+- Use inner/outer precedence exactly as required:
+  - literals/builtins/variables: outer 0
+  - app: outer 5, inner args 4
+  - `*`: outer/inner 10
+  - `+`: outer/inner 20
+  - annot: outer 8, body inner 7, type inner 8
+  - lambda/forall/let: outer 50, body inner 50, annotation/value side per grammar needs
+  - standalone context inner 100
+- Parentheses rule: add when `sub.outer > parent.inner`.
+
+### Step 6.2: Round-trip and examples
+- Validate all README precedence examples.
+- Round-trip property on parser-normal forms.
+
+**Tests:**
+- Golden tests for tricky formatting cases.
+- `parse(pretty(e)) == e` for generated parser-normal expressions.
+
+---
+
+## Phase 7 — Normalization (Alpha + Beta)
+
+### Step 7.1: Alpha-normalization
+- Rename all bound vars to `_`, add indices to disambiguate.
+
+### Step 7.2: Beta-normalization (substitution strategy)
+- Evaluate applications, lets, arithmetic, and builtins.
+- Evaluate under lambda (symbolic normalization).
+- Erase annotations during evaluation.
+- Implement builtins:
+  - `Natural/subtract a b = max 0 (b - a)`
+  - `Natural/fold n T succ zero = succ^n zero`.
+
+### Step 7.3: Combined normalization
+- `normalize = alphaNormalize . betaNormalize`.
+
+**Tests:**
+- README example normalizes to `1144`.
+- Symbolic under-lambda examples from README.
+- Idempotence of full normalization.
+- Lazy vs strict parity on all normalization tests.
+
+---
+
+## Phase 8 — Type Checker
+
+### Step 8.1: Unidirectional checker
+- Implement context-based inference/checking with normalization-based type equality.
+- Enforce no free variables at top-level for accepted programs.
+- Support de Bruijn-indexed variable lookup semantics.
+
+### Step 8.2: Universe and builtin typing
+- Universe rules:
+  - `Natural : Type`
+  - `Type : Kind`
+  - `Kind` is top sort.
+- Builtins:
+  - `Natural/subtract : Natural → Natural → Natural`
+  - `Natural/fold : Natural → ∀(r : Type) → (r → r) → r → r`.
+
+### Step 8.3: Mutual recursion discipline
+- Keep `typeOf` and normalization mutually recursive only through structurally smaller expressions.
+
+**Tests:**
+- Positive: README declarations (`id`, `type_of_id`, `Type : Kind`, full sample).
+- Negative: non-function application, wrong operand types, invalid annotation, unbound vars, invalid index scope.
+- Lazy vs strict type-checking parity.
+
+---
+
+## Phase 9 — NbE Variants
+
+Implement four NbE normalizers:
+1. HOAS closures (`Value -> Value`)
+2. Named closures
+3. Pure de Bruijn
+4. Locally nameless (bound indices + free names)
+
+All must produce the same observable normal forms as substitution-based normalization.
+
+**Tests:**
+- Reuse shared normalization conformance suite.
+- README example and Church-style arithmetic workloads.
+- Property: all evaluators agree on generated well-typed terms.
+
+---
+
+## Phase 10 — Strict vs Lazy Performance Study
+
+### Step 10.1: Workload generator
+- Deep lambdas, deep lets, large arithmetic trees, long application chains.
+- Church-encoded workloads with many reductions but small final numerals.
+
+### Step 10.2: Benchmark matrix
+- Parser backends: Megaparsec vs FlatParse.
+- Evaluators: substitution + 4 NbE variants.
+- AST strictness: Lazy vs Strict where implementation exists.
+
+### Step 10.3: Metrics
+- Criterion timings.
+- RTS stats (`+RTS -s`) for allocation/residency.
+- Report normalized ratios and variance.
+
+**Tests/Checks:**
+- Benchmark correctness assertions (result equality) before timing.
+- Reproducible benchmark script outputs (CSV/Markdown summary).
+
+---
+
+## Phase 11 — CLI Integration
+
+- Pipeline: parse → type-check → normalize → pretty-print.
+- Flags:
+  - parser backend
+  - evaluator backend
+  - AST strictness (`lazy|strict`) for relevant implementations.
+- Error output includes source spans for parse/type errors.
+
+**Tests:**
+- CLI integration tests on valid and invalid programs.
+- Snapshot tests for representative outputs and diagnostics.
+
+---
+
+## Phase 12 — Completion Gates
+
+Release criteria:
+- All unit/property/integration tests passing.
+- Cross-parser and cross-evaluator parity passing.
+- README sample type-checks and evaluates to `1144`.
+- Coverage target reached (100% library, documented exceptions if any).
+- Benchmark report includes strict-vs-lazy comparison and parser/evaluator comparisons.
+
+---
+
+## Notes on Test Strategy
+
+- Use shared test suites parameterized over implementation (parser backend, evaluator backend, AST strictness).
+- Keep separate generators for:
+  - arbitrary syntax trees
+  - parser-normal forms
+  - well-typed expressions.
+- Prefer explicit edge-case tests in addition to QuickCheck properties (especially grammar boundaries and binder/index corner cases).
