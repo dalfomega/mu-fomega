@@ -19,6 +19,12 @@ cabal bench normalize-bench \
   --benchmark-option="-M8g" \
   --benchmark-option="-RTS"
 
+cabal bench nbe-bench \
+  --benchmark-option="--time-limit" \
+  --benchmark-option=4 \
+  --benchmark-option="--csv" \
+  --benchmark-option="nbe-bench-$githash.csv"
+
   
 cabal bench parser-bench \
   --benchmark-option="--time-limit" \

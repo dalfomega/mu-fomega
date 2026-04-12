@@ -36,6 +36,10 @@ library:
     - MuFomega.Substitute
     - MuFomega.Church
     - MuFomega.Normalize
+    - MuFomega.Eval.NbEHOAS
+    - MuFomega.Eval.NbENamed
+    - MuFomega.Eval.NbEDeBruijn
+    - MuFomega.Eval.NbELocallyNameless
     - MuFomega.TypeCheck
     - MuFomega.Parser.Megaparsec
     - MuFomega.Parser.Attoparsec
@@ -43,6 +47,9 @@ library:
     - MuFomega.Syntax.Common
     - MuFomega.Syntax.Lazy
     - MuFomega.Syntax.Strict
+    - MuFomega.Syntax.Convert
+  other-modules:
+    - MuFomega.Eval.NbECommon
 
 executables:
   mu-fomega:
@@ -64,7 +71,7 @@ tests:
       - MuFomega.TraversalSpec
       - MuFomega.NormalizeSpec
       - MuFomega.ChurchSpec
-      - MuFomega.Syntax.Convert
+      - MuFomega.Eval.NbEParitySpec
       - MuFomega.Parser.AttoparsecSpec
       - MuFomega.Parser.FlatParseSpec
       - MuFomega.Parser.MegaparsecSpec
@@ -91,6 +98,21 @@ benchmarks:
   normalize-bench:
     main: NormalizeBench.hs
     source-dirs: bench/normalize
+    other-modules:
+      - NormalizeWorkloads
+    ghc-options:
+      - -Wall
+      - -rtsopts
+    dependencies:
+      - mu-fomega
+      - criterion
+      - deepseq
+      - text
+  nbe-bench:
+    main: NbEVariantsBench.hs
+    source-dirs: bench/normalize
+    other-modules:
+      - NormalizeWorkloads
     ghc-options:
       - -Wall
       - -rtsopts

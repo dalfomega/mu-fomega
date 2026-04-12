@@ -13,32 +13,8 @@ module MuFomega.Church
 
 import Data.Text (Text)
 import qualified MuFomega.Parser.Attoparsec as Atto
-import MuFomega.Syntax.Lazy
-  ( ExprLazy
-      ( EAnnot
-      , EApp
-      , EBinOp
-      , EBuiltin
-      , EForall
-      , ELam
-      , ELet
-      , ENatural
-      , EVar
-      )
-  )
-import MuFomega.Syntax.Strict
-  ( ExprStrict
-      ( SEAnnot
-      , SEApp
-      , SEBinOp
-      , SEBuiltin
-      , SEForall
-      , SELam
-      , SELet
-      , SENatural
-      , SEVar
-      )
-  )
+import MuFomega.Syntax.Convert (toStrict)
+import MuFomega.Syntax.Strict (ExprStrict)
 
 naturalToChurchText :: Integer -> Text
 naturalToChurchText n =
@@ -74,22 +50,9 @@ churchAlternatingText n = churchToNaturalText finalChurch
       | otherwise = churchSubAppText acc delta
 
 parseChurchStrict :: Text -> Either String ExprStrict
-parseChurchStrict = fmap toStrictExpr . Atto.parseExpr
+parseChurchStrict = fmap toStrict . Atto.parseExpr
 
 iter :: Integer -> Text -> Text -> Text
 iter k fn base
   | k <= 0 = base
   | otherwise = fn <> " (" <> iter (k - 1) fn base <> ")"
-
-toStrictExpr :: ExprLazy -> ExprStrict
-toStrictExpr expr =
-  case expr of
-    ENatural n -> SENatural n
-    EBuiltin b -> SEBuiltin b
-    EVar v -> SEVar v
-    EAnnot body tipe -> SEAnnot (toStrictExpr body) (toStrictExpr tipe)
-    ELam name tipe body -> SELam name (toStrictExpr tipe) (toStrictExpr body)
-    EForall name tipe body -> SEForall name (toStrictExpr tipe) (toStrictExpr body)
-    ELet name value body -> SELet name (toStrictExpr value) (toStrictExpr body)
-    EApp f x -> SEApp (toStrictExpr f) (toStrictExpr x)
-    EBinOp op l r -> SEBinOp op (toStrictExpr l) (toStrictExpr r)

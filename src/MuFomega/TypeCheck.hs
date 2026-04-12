@@ -26,19 +26,8 @@ import MuFomega.Syntax.Lazy
       , EVar
       )
   )
-import MuFomega.Syntax.Strict
-  ( ExprStrict
-      ( SEAnnot
-      , SEApp
-      , SEBinOp
-      , SEBuiltin
-      , SEForall
-      , SELam
-      , SELet
-      , SENatural
-      , SEVar
-      )
-  )
+import MuFomega.Syntax.Strict (ExprStrict)
+import MuFomega.Syntax.Convert (toLazy, toStrict)
 
 data TypeError
   = TypeMismatch ExprLazy ExprLazy
@@ -71,10 +60,10 @@ checkTypeLazy :: ExprLazy -> ExprLazy -> Either TypeError ()
 checkTypeLazy expr expected = checkTypeWithContext [] expr expected
 
 inferTypeStrict :: ExprStrict -> Either TypeError ExprStrict
-inferTypeStrict expr = strictFromLazy <$> inferTypeLazy (strictToLazy expr)
+inferTypeStrict expr = toStrict <$> inferTypeLazy (toLazy expr)
 
 checkTypeStrict :: ExprStrict -> ExprStrict -> Either TypeError ()
-checkTypeStrict expr expected = checkTypeLazy (strictToLazy expr) (strictToLazy expected)
+checkTypeStrict expr expected = checkTypeLazy (toLazy expr) (toLazy expected)
 
 inferTypeWithContext :: Context -> ExprLazy -> Either TypeError ExprLazy
 inferTypeWithContext ctx expr =
@@ -210,29 +199,3 @@ appearsAsBinderName expr target =
     ELet name value body -> name == target || appearsAsBinderName value target || appearsAsBinderName body target
     EApp fn arg -> appearsAsBinderName fn target || appearsAsBinderName arg target
     EBinOp _ lhs rhs -> appearsAsBinderName lhs target || appearsAsBinderName rhs target
-
-strictToLazy :: ExprStrict -> ExprLazy
-strictToLazy expr =
-  case expr of
-    SENatural n -> ENatural n
-    SEBuiltin b -> EBuiltin b
-    SEVar v -> EVar v
-    SEAnnot body tipe -> EAnnot (strictToLazy body) (strictToLazy tipe)
-    SELam name tipe body -> ELam name (strictToLazy tipe) (strictToLazy body)
-    SEForall name tipe body -> EForall name (strictToLazy tipe) (strictToLazy body)
-    SELet name value body -> ELet name (strictToLazy value) (strictToLazy body)
-    SEApp fn arg -> EApp (strictToLazy fn) (strictToLazy arg)
-    SEBinOp op lhs rhs -> EBinOp op (strictToLazy lhs) (strictToLazy rhs)
-
-strictFromLazy :: ExprLazy -> ExprStrict
-strictFromLazy expr =
-  case expr of
-    ENatural n -> SENatural n
-    EBuiltin b -> SEBuiltin b
-    EVar v -> SEVar v
-    EAnnot body tipe -> SEAnnot (strictFromLazy body) (strictFromLazy tipe)
-    ELam name tipe body -> SELam name (strictFromLazy tipe) (strictFromLazy body)
-    EForall name tipe body -> SEForall name (strictFromLazy tipe) (strictFromLazy body)
-    ELet name value body -> SELet name (strictFromLazy value) (strictFromLazy body)
-    EApp fn arg -> SEApp (strictFromLazy fn) (strictFromLazy arg)
-    EBinOp op lhs rhs -> SEBinOp op (strictFromLazy lhs) (strictFromLazy rhs)

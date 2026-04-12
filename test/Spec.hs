@@ -5,6 +5,7 @@ import qualified MuFomega.ShiftSpec as ShiftSpec
 import qualified MuFomega.SubstituteSpec as SubstituteSpec
 import qualified MuFomega.TraversalSpec as TraversalSpec
 import qualified MuFomega.ChurchSpec as ChurchSpec
+import qualified MuFomega.Eval.NbEParitySpec as NbEParitySpec
 import qualified MuFomega.NormalizeSpec as NormalizeSpec
 import qualified MuFomega.Parser.AttoparsecSpec as AttoparsecSpec
 import qualified MuFomega.Parser.FlatParseSpec as FlatParseSpec
@@ -22,6 +23,7 @@ main = hspec $ do
   SubstituteSpec.spec
   ChurchSpec.spec
   NormalizeSpec.spec
+  NbEParitySpec.spec
   MegaparsecSpec.spec
   AttoparsecSpec.spec
   FlatParseSpec.spec

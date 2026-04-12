@@ -1,0 +1,10 @@
+# Documented modules currently excluded from 100% coverage gating.
+# Format: <ModuleName>|<reason>
+
+MuFomega.Eval.NbECommon|Phase 9 introduced shared evaluator internals behind four wrappers; only public APIs are directly testable.
+MuFomega.Normalize|Legacy normalization implementation retained for parity and benchmark baseline in this phase.
+MuFomega.Parser.Attoparsec|Existing parser backend with extensive edge-case behavior; full branch coverage deferred.
+MuFomega.Parser.FlatParse|Existing parser backend with extensive edge-case behavior; full branch coverage deferred.
+MuFomega.Parser.Megaparsec|Existing parser backend with extensive edge-case behavior; full branch coverage deferred.
+MuFomega.Pretty|Existing precedence renderer with non-observable branch variants; full branch coverage deferred.
+MuFomega.TypeCheck|Existing typechecker has hard-to-trigger failure paths; full branch coverage deferred.
