@@ -74,8 +74,11 @@ renameVar scope (Var name idx) =
   case resolveBoundDepth scope name idx 0 0 of
     Just depth -> Var "_" depth
     Nothing
-      | name == "_" -> Var "_" (idx + fromIntegral (length scope))
+      | name == "_" -> Var "_" (idx + introducedUnderscoreBinders scope)
       | otherwise -> Var name idx
+
+introducedUnderscoreBinders :: [Text] -> Word
+introducedUnderscoreBinders = fromIntegral . length . filter (/= "_")
 
 resolveBoundDepth :: [Text] -> Text -> Word -> Word -> Word -> Maybe Word
 resolveBoundDepth scope target needle depth seen =
