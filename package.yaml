@@ -34,6 +34,9 @@ library:
     - MuFomega.Traversal
     - MuFomega.Shift
     - MuFomega.Substitute
+    - MuFomega.Church
+    - MuFomega.Normalize
+    - MuFomega.TypeCheck
     - MuFomega.Parser.Megaparsec
     - MuFomega.Parser.Attoparsec
     - MuFomega.Parser.FlatParse
@@ -59,12 +62,15 @@ tests:
       - MuFomega.ShiftSpec
       - MuFomega.SubstituteSpec
       - MuFomega.TraversalSpec
+      - MuFomega.NormalizeSpec
+      - MuFomega.ChurchSpec
       - MuFomega.Syntax.Convert
       - MuFomega.Parser.AttoparsecSpec
       - MuFomega.Parser.FlatParseSpec
       - MuFomega.Parser.MegaparsecSpec
       - MuFomega.Parser.EquivalenceSpec
       - MuFomega.Parser.CommonGrammarSpec
+      - MuFomega.TypeCheckSpec
     dependencies:
       - mu-fomega
       - QuickCheck
@@ -77,6 +83,17 @@ benchmarks:
   parser-bench:
     main: ParserBench.hs
     source-dirs: bench/parser
+    dependencies:
+      - mu-fomega
+      - criterion
+      - deepseq
+      - text
+  normalize-bench:
+    main: NormalizeBench.hs
+    source-dirs: bench/normalize
+    ghc-options:
+      - -Wall
+      - -rtsopts
     dependencies:
       - mu-fomega
       - criterion

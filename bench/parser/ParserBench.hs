@@ -20,8 +20,8 @@ main = do
   verifyParity
   runScalingStudy
   defaultMain
-    [-- mkParserGroup "megaparsec" parseMegaOrDie
-     mkParserGroup "attoparsec" parseAttoOrDie
+    [mkParserGroup "megaparsec" parseMegaOrDie
+     ,mkParserGroup "attoparsec" parseAttoOrDie
     , mkParserGroup "flatparse" parseFlatOrDie
     ]
 
@@ -49,7 +49,7 @@ runScalingStudy :: IO ()
 runScalingStudy = do
   putStrLn "Parser scaling study (log-log exponent by workload/parser):"
   putStrLn ""
-  --runForParser "megaparsec" parseMegaOrDie -- too slow
+  runForParser "megaparsec" parseMegaOrDie -- too slow
   runForParser "attoparsec" parseAttoOrDie
   runForParser "flatparse" parseFlatOrDie
   putStrLn ""
@@ -136,7 +136,7 @@ parseFlatOrDie input =
     Left _ -> error "FlatParse parser failed on generated workload"
 
 scalingDepths :: [Int]
-scalingDepths = [10000, 20000, 30000]
+scalingDepths = [1000, 2000, 3000]
 
 benchDepths :: [Int]
-benchDepths = [10000, 20000, 30000]
+benchDepths = [1000, 2000, 3000]

@@ -5,10 +5,16 @@ module MuFomega
   , module MuFomega.Traversal
   , module MuFomega.Shift
   , module MuFomega.Substitute
+  , module MuFomega.Church
+  , module MuFomega.Normalize
+  , module MuFomega.TypeCheck
   , module MuFomega.Parser.Megaparsec
   , module MuFomega.Pretty
   ) where
 
+import MuFomega.Church
+import MuFomega.Normalize
+import MuFomega.TypeCheck
 import MuFomega.Shift
 import MuFomega.Substitute
 import MuFomega.Parser.Megaparsec

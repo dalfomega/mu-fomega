@@ -7,10 +7,24 @@ hpack
 githash=$(git rev-parse HEAD)
 
 echo "Running benchmarks with cabal..."
+
+
+cabal bench normalize-bench \
+  --benchmark-option="--time-limit" \
+  --benchmark-option=4 \
+  --benchmark-option="--csv" \
+  --benchmark-option="normalize-bench-$githash.csv" \
+  --benchmark-option="+RTS" \
+  --benchmark-option="-A256m" \
+  --benchmark-option="-M8g" \
+  --benchmark-option="-RTS"
+
+  
 cabal bench parser-bench \
   --benchmark-option="--time-limit" \
   --benchmark-option=4 \
   --benchmark-option="--csv" \
   --benchmark-option="parser-bench-$githash.csv"
+
 
 echo "Benchmarks complete!"

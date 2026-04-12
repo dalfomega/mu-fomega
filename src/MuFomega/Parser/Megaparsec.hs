@@ -65,8 +65,7 @@ expression =
     [ try lambdaExpression
     , try letExpression
     , try forallExpression
-    , try arrowExpression
-    , annotatedExpression
+    , arrowOrAnnotatedExpression
     ]
 
 lambdaExpression :: Parser ExprLazy
@@ -127,24 +126,23 @@ forallExpression = do
   body <- expression
   pure (EForall name tipe body)
 
-arrowExpression :: Parser ExprLazy
-arrowExpression = do
-  domain <- operatorExpression
-  whsp
-  arrowToken
-  whsp
-  codomain <- expression
-  pure (EForall "_" domain codomain)
-
-annotatedExpression :: Parser ExprLazy
-annotatedExpression = do
+arrowOrAnnotatedExpression :: Parser ExprLazy
+arrowOrAnnotatedExpression = do
   body <- operatorExpression
-  mTipe <- optional $ try $ do
+  mArrow <- optional $ try $ do
     whsp
-    _ <- char ':'
-    whsp1
+    arrowToken
+    whsp
     expression
-  pure $ maybe body (EAnnot body) mTipe
+  case mArrow of
+    Just codomain -> pure (EForall "_" body codomain)
+    Nothing -> do
+      mTipe <- optional $ try $ do
+        whsp
+        _ <- char ':'
+        whsp1
+        expression
+      pure $ maybe body (EAnnot body) mTipe
 
 operatorExpression :: Parser ExprLazy
 operatorExpression = plusExpression
