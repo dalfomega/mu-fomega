@@ -10,6 +10,7 @@ import qualified MuFomega.Eval.NbEDeBruijn as NbEDeBruijn
 import qualified MuFomega.Eval.NbEHOAS as NbEHOAS
 import qualified MuFomega.Eval.NbELocallyNameless as NbELocallyNameless
 import qualified MuFomega.Eval.NbENamed as NbENamed
+import qualified MuFomega.Eval.NbEParamHOAS as NbEParamHOAS
 import qualified MuFomega.Normalize as Subst
 import MuFomega.Parser.Megaparsec (parseExpr)
 import MuFomega.Syntax.Common
@@ -108,6 +109,7 @@ assertChurchParity n =
       NbENamed.normalizeStrict exprStrict `shouldBe` expectedStrict
       NbEDeBruijn.normalizeStrict exprStrict `shouldBe` expectedStrict
       NbELocallyNameless.normalizeStrict exprStrict `shouldBe` expectedStrict
+      NbEParamHOAS.normalizeStrict exprStrict `shouldBe` expectedStrict
 
 assertAllEvaluatorsAgreeLazy :: ExprLazy -> IO ()
 assertAllEvaluatorsAgreeLazy expr = do
@@ -118,11 +120,13 @@ assertAllEvaluatorsAgreeLazy expr = do
   NbENamed.normalizeLazy expr `shouldBe` expected
   NbEDeBruijn.normalizeLazy expr `shouldBe` expected
   NbELocallyNameless.normalizeLazy expr `shouldBe` expected
+  NbEParamHOAS.normalizeLazy expr `shouldBe` expected
 
   toLazy (NbEHOAS.normalizeStrict strictExpr) `shouldBe` toLazy expectedStrict
   toLazy (NbENamed.normalizeStrict strictExpr) `shouldBe` toLazy expectedStrict
   toLazy (NbEDeBruijn.normalizeStrict strictExpr) `shouldBe` toLazy expectedStrict
   toLazy (NbELocallyNameless.normalizeStrict strictExpr) `shouldBe` toLazy expectedStrict
+  toLazy (NbEParamHOAS.normalizeStrict strictExpr) `shouldBe` toLazy expectedStrict
 
 allAgreeLazy :: ExprLazy -> Bool
 allAgreeLazy expr =
@@ -132,6 +136,7 @@ allAgreeLazy expr =
         , NbENamed.normalizeLazy expr == expected
         , NbEDeBruijn.normalizeLazy expr == expected
         , NbELocallyNameless.normalizeLazy expr == expected
+        , NbEParamHOAS.normalizeLazy expr == expected
         ]
 
 allAgreeStrict :: ExprLazy -> Bool
@@ -143,6 +148,7 @@ allAgreeStrict expr =
         , toLazy (NbENamed.normalizeStrict strictExpr) == expected
         , toLazy (NbEDeBruijn.normalizeStrict strictExpr) == expected
         , toLazy (NbELocallyNameless.normalizeStrict strictExpr) == expected
+        , toLazy (NbEParamHOAS.normalizeStrict strictExpr) == expected
         ]
 
 conformanceCases :: [ExprLazy]

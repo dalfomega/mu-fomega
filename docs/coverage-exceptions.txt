@@ -2,6 +2,7 @@
 # Format: <ModuleName>|<reason>
 
 MuFomega.Eval.NbECommon|Phase 9 introduced shared evaluator internals behind four wrappers; only public APIs are directly testable.
+MuFomega.Eval.NbEParamHOAS|Parametric HOAS evaluator internals are exercised through parity tests, with some internal branches not directly observable.
 MuFomega.Normalize|Legacy normalization implementation retained for parity and benchmark baseline in this phase.
 MuFomega.Parser.Attoparsec|Existing parser backend with extensive edge-case behavior; full branch coverage deferred.
 MuFomega.Parser.FlatParse|Existing parser backend with extensive edge-case behavior; full branch coverage deferred.

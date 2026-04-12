@@ -40,10 +40,12 @@ library:
     - MuFomega.Eval.NbENamed
     - MuFomega.Eval.NbEDeBruijn
     - MuFomega.Eval.NbELocallyNameless
+    - MuFomega.Eval.NbEParamHOAS
     - MuFomega.TypeCheck
     - MuFomega.Parser.Megaparsec
     - MuFomega.Parser.Attoparsec
     - MuFomega.Parser.FlatParse
+    - MuFomega.CLI
     - MuFomega.Syntax.Common
     - MuFomega.Syntax.Lazy
     - MuFomega.Syntax.Strict
@@ -78,6 +80,7 @@ tests:
       - MuFomega.Parser.EquivalenceSpec
       - MuFomega.Parser.CommonGrammarSpec
       - MuFomega.TypeCheckSpec
+      - MuFomega.CLISpec
     dependencies:
       - mu-fomega
       - QuickCheck

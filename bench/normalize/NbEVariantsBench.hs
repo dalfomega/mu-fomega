@@ -5,6 +5,7 @@ import qualified MuFomega.Eval.NbEDeBruijn as NbEDeBruijn
 import qualified MuFomega.Eval.NbEHOAS as NbEHOAS
 import qualified MuFomega.Eval.NbELocallyNameless as NbELocallyNameless
 import qualified MuFomega.Eval.NbENamed as NbENamed
+import qualified MuFomega.Eval.NbEParamHOAS as NbEParamHOAS
 import qualified MuFomega.Normalize as Subst
 import MuFomega.Syntax.Convert (toLazy, toStrict)
 import MuFomega.Syntax.Lazy (ExprLazy)
@@ -46,10 +47,12 @@ assertParity expr =
         assertEq "nbe-named lazy" (NbENamed.normalizeLazy expr) expectedLazy
         assertEq "nbe-debruijn lazy" (NbEDeBruijn.normalizeLazy expr) expectedLazy
         assertEq "nbe-locally-nameless lazy" (NbELocallyNameless.normalizeLazy expr) expectedLazy
+        assertEq "nbe-param-hoas lazy" (NbEParamHOAS.normalizeLazy expr) expectedLazy
         assertEq "nbe-hoas strict" (toLazy (NbEHOAS.normalizeStrict (toStrict expr))) (toLazy expectedStrict)
         assertEq "nbe-named strict" (toLazy (NbENamed.normalizeStrict (toStrict expr))) (toLazy expectedStrict)
         assertEq "nbe-debruijn strict" (toLazy (NbEDeBruijn.normalizeStrict (toStrict expr))) (toLazy expectedStrict)
         assertEq "nbe-locally-nameless strict" (toLazy (NbELocallyNameless.normalizeStrict (toStrict expr))) (toLazy expectedStrict)
+        assertEq "nbe-param-hoas strict" (toLazy (NbEParamHOAS.normalizeStrict (toStrict expr))) (toLazy expectedStrict)
 
 assertEq :: String -> ExprLazy -> ExprLazy -> IO ()
 assertEq label actual expected =
@@ -68,6 +71,7 @@ benchReadme =
       , bench "nbe-named-lazy" (nf NbENamed.normalizeLazy expr)
       , bench "nbe-debruijn-lazy" (nf NbEDeBruijn.normalizeLazy expr)
       , bench "nbe-locally-nameless-lazy" (nf NbELocallyNameless.normalizeLazy expr)
+      , bench "nbe-param-hoas-lazy" (nf NbEParamHOAS.normalizeLazy expr)
       ]
 
 benchFamily :: String -> [Int] -> (Int -> ExprLazy) -> Benchmark
@@ -84,4 +88,5 @@ benchFamily workloadName sizes mkExpr =
           , bench "nbe-named-lazy" (nf NbENamed.normalizeLazy expr)
           , bench "nbe-debruijn-lazy" (nf NbEDeBruijn.normalizeLazy expr)
           , bench "nbe-locally-nameless-lazy" (nf NbELocallyNameless.normalizeLazy expr)
+          , bench "nbe-param-hoas-lazy" (nf NbEParamHOAS.normalizeLazy expr)
           ]

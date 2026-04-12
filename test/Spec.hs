@@ -7,6 +7,7 @@ import qualified MuFomega.TraversalSpec as TraversalSpec
 import qualified MuFomega.ChurchSpec as ChurchSpec
 import qualified MuFomega.Eval.NbEParitySpec as NbEParitySpec
 import qualified MuFomega.NormalizeSpec as NormalizeSpec
+import qualified MuFomega.CLISpec as CLISpec
 import qualified MuFomega.Parser.AttoparsecSpec as AttoparsecSpec
 import qualified MuFomega.Parser.FlatParseSpec as FlatParseSpec
 import qualified MuFomega.Parser.EquivalenceSpec as EquivalenceSpec
@@ -30,3 +31,4 @@ main = hspec $ do
   EquivalenceSpec.spec
   PrettySpec.spec
   TypeCheckSpec.spec
+  CLISpec.spec

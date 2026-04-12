@@ -36,7 +36,7 @@ shiftLazy :: Integer -> Text -> Word -> ExprLazy -> ExprLazy
 shiftLazy d symbol cutoff = go cutoff
   where
     go m expr =
-      case expr of
+      m `seq` case expr of
         ENatural n -> ENatural n
         EBuiltin b -> EBuiltin b
         EVar (Var name idx)
@@ -61,7 +61,7 @@ shiftStrict :: Integer -> Text -> Word -> ExprStrict -> ExprStrict
 shiftStrict d symbol cutoff = go cutoff
   where
     go m expr =
-      case expr of
+      m `seq` case expr of
         SENatural n -> SENatural n
         SEBuiltin b -> SEBuiltin b
         SEVar (Var name idx)
