@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module MuFomega.Parser.Megaparsec
-  ( ParseFailureCategory (..)
-  , parseExpr
-  , parseExprWithCategory
-  ) where
+module MuFomega.Parser.Megaparsec (
+    ParseFailureCategory (..),
+    parseExpr,
+    parseExprWithCategory,
+) where
 
 import Control.Applicative (empty)
 import Control.Monad (void)
@@ -14,36 +14,36 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (isNothing)
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Void (Void)
 import MuFomega.Syntax.Common (BinOp (Plus, Times), Builtin (Kind, Natural, NaturalFold, NaturalSubtract, Type), Var (Var))
 import MuFomega.Syntax.Lazy (ExprLazy (EAnnot, EApp, EBinOp, EBuiltin, EForall, ELam, ELet, ENatural, EVar))
-import Text.Megaparsec
-  ( ParseError (TrivialError)
-  , ParseErrorBundle (bundleErrors)
-  , Parsec
-  , anySingle
-  , choice
-  , eof
-  , lookAhead
-  , many
-  , manyTill
-  , notFollowedBy
-  , optional
-  , parse
-  , satisfy
-  , some
-  , try
-  , (<|>)
-  )
+import Text.Megaparsec (
+    ParseError (TrivialError),
+    ParseErrorBundle (bundleErrors),
+    Parsec,
+    anySingle,
+    choice,
+    eof,
+    lookAhead,
+    many,
+    manyTill,
+    notFollowedBy,
+    optional,
+    parse,
+    satisfy,
+    some,
+    try,
+    (<|>),
+ )
 import Text.Megaparsec.Char (alphaNumChar, char, eol, letterChar, string)
 import Text.Megaparsec.Error (ErrorItem (EndOfInput))
-import Data.Void (Void)
 
 type Parser = Parsec Void Text
 
 data ParseFailureCategory
-  = UnexpectedEndOfInput
-  | UnexpectedToken
-  deriving (Eq, Show)
+    = UnexpectedEndOfInput
+    | UnexpectedToken
+    deriving (Eq, Show)
 
 parseExpr :: Text -> Either (ParseErrorBundle Text Void) ExprLazy
 parseExpr input = parse fullExpression (sourceName input) input
@@ -53,197 +53,197 @@ parseExprWithCategory = first classifyFailure . parseExpr
 
 fullExpression :: Parser ExprLazy
 fullExpression = do
-  whsp
-  expr <- expression
-  whsp
-  eof
-  pure expr
+    whsp
+    expr <- expression
+    whsp
+    eof
+    pure expr
 
 expression :: Parser ExprLazy
 expression =
-  choice
-    [ try lambdaExpression
-    , try letExpression
-    , try forallExpression
-    , arrowOrAnnotatedExpression
-    ]
+    choice
+        [ try lambdaExpression
+        , try letExpression
+        , try forallExpression
+        , arrowOrAnnotatedExpression
+        ]
 
 lambdaExpression :: Parser ExprLazy
 lambdaExpression = do
-  lambdaToken
-  whsp
-  _ <- char '('
-  whsp
-  name <- nonReservedLabel
-  whsp
-  _ <- char ':'
-  whsp1
-  tipe <- expression
-  whsp
-  _ <- char ')'
-  whsp
-  arrowToken
-  whsp
-  body <- expression
-  pure (ELam name tipe body)
-
-letExpression :: Parser ExprLazy
-letExpression = do
-  bindings <- some (try letBinding)
-  keyword "in"
-  whsp1
-  body <- expression
-  pure (foldr (uncurry ELet) body bindings)
-
-letBinding :: Parser (Text, ExprLazy)
-letBinding = do
-  keyword "let"
-  whsp1
-  name <- nonReservedLabel
-  whsp
-  _ <- char '='
-  whsp
-  value <- expression
-  whsp1
-  pure (name, value)
-
-forallExpression :: Parser ExprLazy
-forallExpression = do
-  forallToken
-  whsp
-  _ <- char '('
-  whsp
-  name <- nonReservedLabel
-  whsp
-  _ <- char ':'
-  whsp1
-  tipe <- expression
-  whsp
-  _ <- char ')'
-  whsp
-  arrowToken
-  whsp
-  body <- expression
-  pure (EForall name tipe body)
-
-arrowOrAnnotatedExpression :: Parser ExprLazy
-arrowOrAnnotatedExpression = do
-  body <- operatorExpression
-  mArrow <- optional $ try $ do
+    lambdaToken
+    whsp
+    _ <- char '('
+    whsp
+    name <- nonReservedLabel
+    whsp
+    _ <- char ':'
+    whsp1
+    tipe <- expression
+    whsp
+    _ <- char ')'
     whsp
     arrowToken
     whsp
-    expression
-  case mArrow of
-    Just codomain -> pure (EForall "_" body codomain)
-    Nothing -> do
-      mTipe <- optional $ try $ do
+    body <- expression
+    pure (ELam name tipe body)
+
+letExpression :: Parser ExprLazy
+letExpression = do
+    bindings <- some (try letBinding)
+    keyword "in"
+    whsp1
+    body <- expression
+    pure (foldr (uncurry ELet) body bindings)
+
+letBinding :: Parser (Text, ExprLazy)
+letBinding = do
+    keyword "let"
+    whsp1
+    name <- nonReservedLabel
+    whsp
+    _ <- char '='
+    whsp
+    value <- expression
+    whsp1
+    pure (name, value)
+
+forallExpression :: Parser ExprLazy
+forallExpression = do
+    forallToken
+    whsp
+    _ <- char '('
+    whsp
+    name <- nonReservedLabel
+    whsp
+    _ <- char ':'
+    whsp1
+    tipe <- expression
+    whsp
+    _ <- char ')'
+    whsp
+    arrowToken
+    whsp
+    body <- expression
+    pure (EForall name tipe body)
+
+arrowOrAnnotatedExpression :: Parser ExprLazy
+arrowOrAnnotatedExpression = do
+    body <- operatorExpression
+    mArrow <- optional $ try $ do
         whsp
-        _ <- char ':'
-        whsp1
+        arrowToken
+        whsp
         expression
-      pure $ maybe body (EAnnot body) mTipe
+    case mArrow of
+        Just codomain -> pure (EForall "_" body codomain)
+        Nothing -> do
+            mTipe <- optional $ try $ do
+                whsp
+                _ <- char ':'
+                whsp1
+                expression
+            pure $ maybe body (EAnnot body) mTipe
 
 operatorExpression :: Parser ExprLazy
 operatorExpression = plusExpression
 
 plusExpression :: Parser ExprLazy
 plusExpression = do
-  firstTerm <- timesExpression
-  rest <- many $ try $ do
-    whsp
-    _ <- char '+'
-    whsp
-    timesExpression
-  pure (foldl (EBinOp Plus) firstTerm rest)
+    firstTerm <- timesExpression
+    rest <- many $ try $ do
+        whsp
+        _ <- char '+'
+        whsp
+        timesExpression
+    pure (foldl (EBinOp Plus) firstTerm rest)
 
 timesExpression :: Parser ExprLazy
 timesExpression = do
-  firstTerm <- applicationExpression
-  rest <- many $ try $ do
-    whsp
-    _ <- char '*'
-    whsp
-    applicationExpression
-  pure (foldl (EBinOp Times) firstTerm rest)
+    firstTerm <- applicationExpression
+    rest <- many $ try $ do
+        whsp
+        _ <- char '*'
+        whsp
+        applicationExpression
+    pure (foldl (EBinOp Times) firstTerm rest)
 
 applicationExpression :: Parser ExprLazy
 applicationExpression = do
-  fn <- primitiveExpression
-  args <- many $ try (whsp1 *> primitiveExpression)
-  pure (foldl EApp fn args)
+    fn <- primitiveExpression
+    args <- many $ try (whsp1 *> primitiveExpression)
+    pure (foldl EApp fn args)
 
 primitiveExpression :: Parser ExprLazy
 primitiveExpression =
-  choice
-    [ ENatural <$> naturalLiteral
-    , try identifierExpression
-    , parenthesizedExpression
-    ]
+    choice
+        [ ENatural <$> naturalLiteral
+        , try identifierExpression
+        , parenthesizedExpression
+        ]
 
 identifierExpression :: Parser ExprLazy
 identifierExpression =
-  choice
-    [ EVar <$> try variable
-    , EBuiltin <$> builtin
-    ]
+    choice
+        [ EVar <$> try variable
+        , EBuiltin <$> builtin
+        ]
 
 variable :: Parser Var
 variable = do
-  name <- nonReservedLabel
-  index <- optional $ try $ do
-    whsp
-    _ <- char '@'
-    whsp
-    naturalIndex
-  pure (Var name (maybe 0 id index))
+    name <- nonReservedLabel
+    index <- optional $ try $ do
+        whsp
+        _ <- char '@'
+        whsp
+        naturalIndex
+    pure (Var name (maybe 0 id index))
 
 parenthesizedExpression :: Parser ExprLazy
 parenthesizedExpression = do
-  _ <- char '('
-  whsp
-  inner <- expression
-  whsp
-  _ <- char ')'
-  pure $! inner
+    _ <- char '('
+    whsp
+    inner <- expression
+    whsp
+    _ <- char ')'
+    pure $! inner
 
 naturalLiteral :: Parser Integer
 naturalLiteral = zeroLiteral <|> nonZeroLiteral
   where
     zeroLiteral = do
-      _ <- char '0'
-      notFollowedBy (satisfy isDigit)
-      pure 0
+        _ <- char '0'
+        notFollowedBy (satisfy isDigit)
+        pure 0
 
     nonZeroLiteral = do
-      firstDigit <- satisfy (`elem` ['1' .. '9'])
-      restDigits <- many (satisfy isDigit)
-      pure (read (firstDigit : restDigits))
+        firstDigit <- satisfy (`elem` ['1' .. '9'])
+        restDigits <- many (satisfy isDigit)
+        pure (read (firstDigit : restDigits))
 
 naturalIndex :: Parser Word
 naturalIndex = fromInteger <$> naturalLiteral
 
 builtin :: Parser Builtin
 builtin =
-  choice
-    [ builtinToken "Natural/subtract" *> pure NaturalSubtract
-    , builtinToken "Natural/fold" *> pure NaturalFold
-    , builtinToken "Natural" *> pure Natural
-    , builtinToken "Type" *> pure Type
-    , builtinToken "Kind" *> pure Kind
-    ]
+    choice
+        [ builtinToken "Natural/subtract" *> pure NaturalSubtract
+        , builtinToken "Natural/fold" *> pure NaturalFold
+        , builtinToken "Natural" *> pure Natural
+        , builtinToken "Type" *> pure Type
+        , builtinToken "Kind" *> pure Kind
+        ]
 
 nonReservedLabel :: Parser Text
 nonReservedLabel = do
-  name <- label
-  if name `elem` builtinNames then empty else pure name
+    name <- label
+    if name `elem` builtinNames then empty else pure name
 
 label :: Parser Text
 label = do
-  firstChar <- labelFirstChar
-  rest <- many labelNextChar
-  let name = Text.pack (firstChar : rest)
-  if name `elem` keywordNames then empty else pure name
+    firstChar <- labelFirstChar
+    rest <- many labelNextChar
+    let name = Text.pack (firstChar : rest)
+    if name `elem` keywordNames then empty else pure name
 
 labelFirstChar :: Parser Char
 labelFirstChar = letterChar <|> char '_'
@@ -274,18 +274,18 @@ whsp1 = void (some whitespaceChunk)
 
 whitespaceChunk :: Parser ()
 whitespaceChunk =
-  choice
-    [ void (char ' ')
-    , void (char '\t')
-    , void eol
-    , lineComment
-    ]
+    choice
+        [ void (char ' ')
+        , void (char '\t')
+        , void eol
+        , lineComment
+        ]
 
 lineComment :: Parser ()
 lineComment = do
-  _ <- string "--"
-  _ <- manyTill anySingle (lookAhead (void eol <|> eof))
-  void eol <|> eof
+    _ <- string "--"
+    _ <- manyTill anySingle (lookAhead (void eol <|> eof))
+    void eol <|> eof
 
 keywordNames :: [Text]
 keywordNames = ["let", "in", "forall"]
@@ -295,13 +295,13 @@ builtinNames = ["Natural", "Natural/fold", "Natural/subtract", "Type", "Kind"]
 
 sourceName :: Text -> String
 sourceName input
-  | Text.null input = ""
-  | otherwise = "<microfomega>"
+    | Text.null input = ""
+    | otherwise = "<microfomega>"
 
 classifyFailure :: ParseErrorBundle Text Void -> ParseFailureCategory
 classifyFailure bundle =
-  case bundleErrors bundle of
-    TrivialError _ unexpected expected :| _
-      | unexpected == Just EndOfInput -> UnexpectedEndOfInput
-      | isNothing unexpected && null expected -> UnexpectedEndOfInput
-    _ -> UnexpectedToken
+    case bundleErrors bundle of
+        TrivialError _ unexpected expected :| _
+            | unexpected == Just EndOfInput -> UnexpectedEndOfInput
+            | isNothing unexpected && null expected -> UnexpectedEndOfInput
+        _ -> UnexpectedToken

@@ -1,7 +1,7 @@
-module MuFomega.Eval.NbEHOAS
-  ( normalizeLazy
-  , normalizeStrict
-  ) where
+module MuFomega.Eval.NbEHOAS (
+    normalizeLazy,
+    normalizeStrict,
+) where
 
 import qualified MuFomega.Eval.NbECommon as Common
 import MuFomega.Syntax.Lazy (ExprLazy)

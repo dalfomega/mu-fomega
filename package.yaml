@@ -6,7 +6,7 @@ maintainer: mu-fomega contributors
 copyright: "2026"
 tested-with: GHC ==9.14.*
 
-extra-source-files:
+extra-doc-files:
   - README.md
 
 description: microFomega implementation experiments

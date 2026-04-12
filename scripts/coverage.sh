@@ -34,7 +34,7 @@ echo "Generating coverage report..."
 hpc markup "${tix_path}" "${hpcdir_args[@]}" "${report_excludes[@]}" --destdir="coverage-html"
 
 echo "Collecting XML coverage report..."
-hpc report "${tix_path}" "${hpcdir_args[@]}" "${report_excludes[@]}" --per-module --xml-output > coverage.xml
+hpc report "${tix_path}" "${hpcdir_args[@]}" "${report_excludes[@]}" --per-module --xml-output >coverage.xml
 
 exceptions_file="docs/coverage-exceptions.txt"
 if [ ! -f "${exceptions_file}" ]; then

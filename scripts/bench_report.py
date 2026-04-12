@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from statistics import fmean
 from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 
-
 HASHED_FILENAME_RE = re.compile(r"^(?P<dataset>.+)-(?P<commit>[0-9a-f]{7,40})$")
 HASH_RE = re.compile(r"^[0-9a-f]{7,40}$")
 
@@ -67,7 +66,9 @@ class ReducedPoint:
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate static benchmark history HTML report.")
+    parser = argparse.ArgumentParser(
+        description="Generate static benchmark history HTML report."
+    )
     parser.add_argument("csv_files", nargs="+", help="Input CSV files.")
     parser.add_argument(
         "-o",
@@ -162,7 +163,9 @@ def safe_float(value: str | None) -> float | None:
         return None
 
 
-def collect_points(paths: Sequence[str]) -> Tuple[List[RawPoint], Dict[str, Dict[str, str]], List[str]]:
+def collect_points(
+    paths: Sequence[str],
+) -> Tuple[List[RawPoint], Dict[str, Dict[str, str]], List[str]]:
     raw_points: List[RawPoint] = []
     files_meta: Dict[str, Dict[str, str]] = {}
     commit_seen_order: "OrderedDict[str, None]" = OrderedDict()
@@ -331,9 +334,13 @@ def build_payload(
     return {
         "files": files,
         "commits": list(commit_order),
-        "commit_labels": {commit: short_commit_label(commit) for commit in commit_order},
+        "commit_labels": {
+            commit: short_commit_label(commit) for commit in commit_order
+        },
         "groups": sorted(groups_set),
-        "series_by_group": {group: sorted(series) for group, series in series_by_group.items()},
+        "series_by_group": {
+            group: sorted(series) for group, series in series_by_group.items()
+        },
         "index": index,
     }
 
