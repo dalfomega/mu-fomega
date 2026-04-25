@@ -1,0 +1,26 @@
+name: small
+version: 0.1.0.0
+license: BSD-3-Clause
+author: mu-fomega contributors
+maintainer: mu-fomega contributors
+copyright: "2026"
+tested-with: GHC ==9.14.*
+
+dependencies:
+  - base >= 4.18 && < 5
+
+ghc-options:
+  - -Wall
+
+library:
+  source-dirs: src
+  exposed-modules:
+    - Small
+
+tests:
+  small-test:
+    main: Spec.hs
+    source-dirs: test
+    dependencies:
+      - small
+      - hspec

@@ -1,0 +1,10 @@
+let f = λ(x : Natural) → λ(x : Natural) → (123 + x) * x@1
+let id = λ(a : Type) → λ(x : a) → x
+let type_of_id = ∀(a : Type) → a → a
+let _ = id : type_of_id
+let _ = type_of_id : Type
+let _ = Type : Kind
+let Void = ∀(r : Type) → r
+let Unit = ∀(r : Type) → r → r
+let Pair = λ(a : Type) → λ(b : Type) → ∀(r : Type) → (a → b → r) → r
+in f (Natural/subtract 2 10) (id Natural 20)

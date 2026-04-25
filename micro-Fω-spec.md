@@ -146,16 +146,22 @@ expression =
     ; "forall (x : a) -> b"
     / forall whsp "(" whsp nonreserved-label whsp ":" whsp1 expression whsp ")" whsp arrow whsp expression
     ;
-    ; "a -> b" is shorthand syntax for "forall (_ : a) -> b"
+    ; Grammar was modified here to avoid backtracking:
+    ; instead of separate alternatives, combine arrow and annotation as optional suffixes to operator-expression.
+    ; In prevoius grammar spec, the alternatives were:
+    ; / operator-expression whsp arrow whsp expression
+    ; / annotated-expression  ; "x : t"
+    ; The modified production is:
+    / operator-expression [ whsp arrow whsp expression | whsp ":" whsp1 expression ]
+    ; Previous grammar was:
+    ;; "a -> b", shorthand for forall (_ : a) -> b
+    ;; NOTE: Backtrack if parsing this alternative fails
+    ; / operator-expression whsp arrow whsp expression
     ;
-    ; NOTE: Backtrack if parsing this alternative fails
-    / operator-expression whsp arrow whsp expression
-    ;
-    ; "x : t"
-    / annotated-expression
-
-; Nonempty-whitespace required after `:` in type annotations
-annotated-expression = operator-expression [ whsp ":" whsp1 expression ]
+    ;; "x : t"
+    ;/ annotated-expression
+    ;; Nonempty-whitespace required after `:` in type annotations
+    ;annotated-expression = operator-expression [ whsp ":" whsp1 expression ]
 
 ; "let x = e1"
 let-binding = let whsp1 nonreserved-label whsp "=" whsp expression whsp1

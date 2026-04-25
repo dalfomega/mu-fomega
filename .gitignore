@@ -30,3 +30,5 @@ cabal.project.local~
 coverage-html/
 coverage.xml
 mu-fomega.cabal
+small/small.cabal
+small/dist-newstyle/

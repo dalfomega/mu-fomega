@@ -1,0 +1,24 @@
+let Nat = ∀(r : Type) → (r → r) → r → r
+let zero = (λ(r : Type) → λ(s : r → r) → λ(z : r) → z) : Nat
+let succ =
+      ( λ(n : Nat) →
+          λ(r : Type) → λ(s : r → r) → λ(z : r) → s (n r s z)
+      ) : Nat → Nat
+let one = (succ zero) : Nat
+let two = (succ one) : Nat
+
+let List = λ(a : Type) → ∀(r : Type) → (a → r → r) → r → r
+let nil = (λ(a : Type) → λ(r : Type) → λ(c : a → r → r) → λ(n : r) → n) : ∀(a : Type) → List a
+let cons =
+      ( λ(a : Type) → λ(x : a) → λ(xs : List a) →
+          λ(r : Type) → λ(c : a → r → r) → λ(n : r) → c x (xs r c n)
+      ) : ∀(a : Type) → a → List a → List a
+let length =
+      ( λ(a : Type) → λ(xs : List a) →
+          xs Nat (λ(_ : a) → λ(n : Nat) → succ n) zero
+      ) : ∀(a : Type) → List a → Nat
+let toNatural =
+      (λ(n : Nat) → n Natural (λ(k : Natural) → k + 1) 0) : Nat → Natural
+
+let xs = cons Nat one (cons Nat two (nil Nat))
+in toNatural (length Nat xs)

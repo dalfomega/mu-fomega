@@ -1,0 +1,8 @@
+let id = λ(a : Type) → λ(x : a) → x
+let const = λ(a : Type) → λ(b : Type) → λ(x : a) → λ(_ : b) → x
+let applyTwice =
+      λ(a : Type) → λ(f : a → a) → λ(x : a) → f (f x)
+let _ = id : ∀(a : Type) → a → a
+let _ = const : ∀(a : Type) → ∀(b : Type) → a → b → a
+let _ = applyTwice : ∀(a : Type) → (a → a) → a → a
+in applyTwice Natural (λ(n : Natural) → n + 1) (id Natural 5)
