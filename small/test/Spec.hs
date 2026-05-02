@@ -1,7 +1,7 @@
 module Main (main) where
 
 import qualified Small
-import Test.Hspec (hspec, describe, it, shouldBe)
+import Test.Hspec (describe, hspec, it, shouldBe)
 
 main :: IO ()
 main = hspec $ do

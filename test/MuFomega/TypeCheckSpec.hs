@@ -33,8 +33,8 @@ import MuFomega.Syntax.Strict (
  )
 import MuFomega.TypeCheck (
     TypeError (
-        KindHasNoType,
         InvalidTypeExpression,
+        KindHasNoType,
         NotAFunction,
         TopLevelFreeVariable,
         TypeMismatch,

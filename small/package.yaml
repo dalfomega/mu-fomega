@@ -7,7 +7,7 @@ copyright: "2026"
 tested-with: GHC ==9.14.*
 
 dependencies:
-  - base >= 4.18 && < 5
+  - base >= 4.8 && < 5
 
 ghc-options:
   - -Wall
@@ -16,6 +16,7 @@ library:
   source-dirs: src
   exposed-modules:
     - Small
+    - Syntax
 
 tests:
   small-test:
