@@ -7,16 +7,26 @@ copyright: "2026"
 tested-with: GHC ==9.14.*
 
 dependencies:
-  - base >= 4.8 && < 5
+  - base >= 4.8 && < 5  # need 4.8 for Numeric.Natural
+  - array  # for alex
 
 ghc-options:
   - -Wall
+
+default-extensions:
+  - OverloadedStrings
+  - StrictData
+  - LambdaCase
+  - DerivingStrategies
 
 library:
   source-dirs: src
   exposed-modules:
     - Small
     - Syntax
+    - Lexer
+  build-tools:
+    - alex
 
 tests:
   small-test:
