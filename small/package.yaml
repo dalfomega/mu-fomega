@@ -9,6 +9,8 @@ tested-with: GHC ==9.14.*
 dependencies:
   - base >= 4.8 && < 5  # need 4.8 for Numeric.Natural
   - array  # for alex
+  - megaparsec
+  - vector
 
 ghc-options:
   - -Wall
@@ -18,6 +20,9 @@ default-extensions:
   - StrictData
   - LambdaCase
   - DerivingStrategies
+  - OverloadedRecordDot
+  - RecordWildCards
+  - NamedFieldPuns
 
 library:
   source-dirs: src

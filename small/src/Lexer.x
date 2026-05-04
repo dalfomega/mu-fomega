@@ -1,10 +1,11 @@
 {
 module Lexer (
-  Token(..)
+  SToken(..)
+  , BareToken (..)
   , AlexPosn(..)
   , scanTokens
   ) where
-import Numeric.Natural (Natural)
+import qualified Numeric.Natural as Nat
 import qualified Syntax as S
 }
 
@@ -45,59 +46,67 @@ tokens :-
 @comment ;
  
 -- Keywords and symbolic keywords
-  "let"                         { \p _ -> TokLet p }
-  "in"                          { \p _ -> TokIn p }
-  "forall"                      { \p _ -> TokForall p }
-  "∀"                           { \p _ -> TokForall p }
-  "\\"                          { \p _ -> TokLambda p }
+  "let"                         { wrapNullary TokLet }
+  "in"                          { wrapNullary TokIn }
+  "forall"                      { wrapNullary TokForall }
+  "∀"                           { wrapNullary TokForall }
+  "\\"                          { wrapNullary TokLambda }
   
   -- Special punctuation.
-  "λ"                           { \p _ -> TokLambda p }
-  "->"                          { \p _ -> TokArrow p }
-  "→"                           { \p _ -> TokArrow p }
-  "("                           { \p _ -> TokLParen p }
-  ")"                           { \p _ -> TokRParen p }
-  ":"                           { \p _ -> TokColon p }
-  "="                           { \p _ -> TokEquals p }
-  "@"                           { \p _ -> TokAt p }
+  "λ"                           { wrapNullary TokLambda }
+  "->"                          { wrapNullary TokArrow }
+  "→"                           { wrapNullary TokArrow }
+  "("                           { wrapNullary TokLParen }
+  ")"                           { wrapNullary TokRParen }
+  ":"                           { wrapNullary TokColon }
+  "="                           { wrapNullary TokEquals }
+  "@"                           { wrapNullary TokAt }
 
   -- Infix operators.
-  "+"                           { \p _ -> TokBuiltin p (S.BOperator S.BNaturalPlus) }
-  "*"                           { \p _ -> TokBuiltin p (S.BOperator S.BNaturalTimes) }
+  "+"                           { wrapNullary $ TokBuiltin (S.BOperator S.BNaturalPlus) }
+  "*"                           { wrapNullary $ TokBuiltin (S.BOperator S.BNaturalTimes) }
   
   -- Builtins / type literals
   -- Order matters: longer/more specific before shorter, when one is a prefix of the other.
-  "Natural/subtract"            { \p _ -> TokBuiltin p (S.BFunction S.BNaturalSubtract) }
-  "Natural"                     { \p _ -> TokBuiltin p (S.BTypeLit S.TLNatural) }
-  "Type"                        { \p _ -> TokBuiltin p (S.BTypeLit S.TLType) }
-  "Kind"                        { \p _ -> TokBuiltin p (S.BTypeLit S.TLKind) }
+  "Natural/subtract"            {wrapNullary $ TokBuiltin (S.BFunction S.BNaturalSubtract) }
+  "Natural"                     {wrapNullary $ TokBuiltin (S.BTypeLit S.TLNatural) }
+  "Type"                        {wrapNullary $ TokBuiltin (S.BTypeLit S.TLType) }
+  "Kind"                        {wrapNullary $ TokBuiltin (S.BTypeLit S.TLKind) }
 
   -- Numeric literal
-  @natural_literal                         { \p s -> TokNatLit p (read s) }
+  @natural_literal              { wrapUnary (\s -> TokNatLit (read s)) }
 
   -- Identifier / label: this rule must be last, or else it will match keywords and builtins.
-  @ident                          { \p s -> TokIdentifier p s }
+  @ident                        { wrapUnary TokIdentifier }
 
 {
 
-data Token
-  = TokLet         AlexPosn
-  | TokIn          AlexPosn
-  | TokForall      AlexPosn
-  | TokLambda      AlexPosn
-  | TokArrow       AlexPosn
-  | TokBuiltin     AlexPosn S.Builtins
-  | TokLParen      AlexPosn
-  | TokRParen      AlexPosn
-  | TokColon       AlexPosn
-  | TokEquals      AlexPosn
-  | TokAt          AlexPosn
-  | TokNatLit      AlexPosn Natural
-  | TokIdentifier  AlexPosn String
+data BareToken
+  = TokLet          
+  | TokIn           
+  | TokForall       
+  | TokLambda       
+  | TokArrow        
+  | TokBuiltin S.Builtins
+  | TokLParen       
+  | TokRParen       
+  | TokColon        
+  | TokEquals       
+  | TokAt           
+  | TokNatLit Nat.Natural
+  | TokIdentifier String
   deriving (Eq, Show)
 
+data SToken = SToken { posn :: AlexPosn, token :: BareToken }
+
+wrapNullary :: BareToken -> AlexPosn -> String -> SToken
+wrapNullary t p _ = SToken p t
+
+wrapUnary :: (String -> BareToken) -> AlexPosn -> String -> SToken
+wrapUnary f p s = SToken p (f s)
+
 -- | Entry point used by the parser.
-scanTokens :: String -> [Token]
+scanTokens :: String -> [SToken]
 scanTokens = alexScanTokens
 
 }
