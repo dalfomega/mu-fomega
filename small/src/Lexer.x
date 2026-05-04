@@ -79,6 +79,8 @@ tokens :-
   -- Identifier / label: this rule must be last, or else it will match keywords and builtins.
   @ident                        { wrapUnary TokIdentifier }
 
+  -- Catch-all rule, emits error token.
+  .                             { wrapUnary TokError }
 {
 
 data BareToken
@@ -95,9 +97,11 @@ data BareToken
   | TokAt           
   | TokNatLit Nat.Natural
   | TokIdentifier String
-  deriving (Eq, Show)
+  | TokError String
+  deriving (Eq, Show, Ord)
 
 data SToken = SToken { posn :: AlexPosn, token :: BareToken }
+  deriving (Eq, Show, Ord)
 
 wrapNullary :: BareToken -> AlexPosn -> String -> SToken
 wrapNullary t p _ = SToken p t

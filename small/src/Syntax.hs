@@ -6,7 +6,7 @@ newtype DBI = DBI Nat.Natural
     deriving stock (Eq, Show, Ord)
 
 newtype InternedName = InternedName Int
-    deriving (Eq, Show)
+    deriving (Eq, Show, Ord)
 
 data SynExpr
     = SNatLit Nat.Natural -- 123
@@ -17,7 +17,7 @@ data SynExpr
     | SLet InternedName SynExpr SynExpr -- let x = y in z
     | SBuiltin Builtins -- Natural/subtract, +, *, Natural, Type, Kind
     | STypeAnn SynExpr SynExpr -- x : t
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Show, Ord)
 
 -- data ValExpr -- This is created after typechecking. Each expression should already be well-typed. For now, we omit the type annotations.
 --     = NatLit Nat.Natural
@@ -28,18 +28,18 @@ data SynExpr
 --     | Builtin Builtins   -- Each builtin has a fixed known type, no need to have the type annotation here.
 
 data BuiltinFunctions = BNaturalSubtract
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Show, Ord)
 
 data BuiltinOperators
     = BNaturalPlus
     | BNaturalTimes
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Show, Ord)
 
 data Builtins
     = BFunction BuiltinFunctions
     | BOperator BuiltinOperators
     | BTypeLit TypeLiteral
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Show, Ord)
 
 data TypeLiteral = TLNatural | TLType | TLKind
-    deriving stock (Eq, Show)
+    deriving stock (Eq, Show, Ord)
