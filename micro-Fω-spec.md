@@ -148,7 +148,7 @@ expression =
     ;
     ; Grammar was modified here to avoid backtracking:
     ; instead of separate alternatives, combine arrow and annotation as optional suffixes to operator-expression.
-    ; In prevoius grammar spec, the alternatives were:
+    ; In previous grammar spec, the alternatives were:
     ; / operator-expression whsp arrow whsp expression
     ; / annotated-expression  ; "x : t"
     ; The modified production is:
@@ -195,6 +195,7 @@ We use different libraries to implement this grammar, and compare performance.
 
 
 The pretty-printer works by computing the "inner" and "outer" binding precedence of each expression and each sub-expression.
+More precisely, for each top-level expression constructor, an expression made by that constructor has an outer precedence; and each of its sub-expressions has an inner precedence.
 
 Higher precedence values bind _weaker_.
 The operation `*` has precedence `10`, and the operation `+` has precedence `20`.
@@ -217,7 +218,7 @@ The task is to define all those precedence values for each of the constructors a
 Here are some examples of how this mechanism works.
 
 
-Binary operations have equal outer and inner precedence values. This is what we call the "precedence of the operation".
+Binary operations often have equal outer and inner precedence values for all sub-expressions. This is what we call the "precedence of the operation".
 
 $$
 \underbrace{~a~ +~}_{20\rightarrow}~ \underbrace{~b ~*~ c~}_{\leftarrow 10}\quad\quad
@@ -232,7 +233,7 @@ $$
  
 Some constructors have unequal outer and inner precedence values.
 For example, `Applied(func, arg)` has outer precedence `5` and inner precedence `4` for each of its two arguments.
-This allows us to have correct precedence in these examples.
+This allows us to have correct parentheses in these examples.
 
 $$
 (a~ + ~ b) ~ * ~ f ~~ (g ~~ c)  \quad\quad

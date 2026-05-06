@@ -37,6 +37,9 @@ tests:
   small-test:
     main: Spec.hs
     source-dirs: test
+    build-tools:
+      - hspec-discover
     dependencies:
       - small
       - hspec
+      - hspec-discover

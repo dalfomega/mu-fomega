@@ -39,18 +39,21 @@ $ident_rest   = [a-zA-Z0-9\-\/\_]
 
 tokens :-
 
--- For now we skip all whitespace and all comments.
+  -- For now we skip all comments.
 
-@whitespace ;
+  @comment ;
 
-@comment ;
+
+  -- Whitespace is its own token.
+  @whitespace                   { wrapNullary TokWS }
+
  
 -- Keywords and symbolic keywords
   "let"                         { wrapNullary TokLet }
   "in"                          { wrapNullary TokIn }
   "forall"                      { wrapNullary TokForall }
   "∀"                           { wrapNullary TokForall }
-  "\\"                          { wrapNullary TokLambda }
+  "\"                           { wrapNullary TokLambda }
   
   -- Special punctuation.
   "λ"                           { wrapNullary TokLambda }
@@ -84,7 +87,8 @@ tokens :-
 {
 
 data BareToken
-  = TokLet          
+  = TokWS
+  | TokLet          
   | TokIn           
   | TokForall       
   | TokLambda       
