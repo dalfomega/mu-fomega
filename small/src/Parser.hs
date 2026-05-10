@@ -16,7 +16,7 @@ import Lexer (AlexPosn (..), SToken (..), scanTokens)
 import LexerDefs (BareToken (..), TokenNullary (..))
 import Numeric.Natural (Natural)
 import qualified Syntax as S
-import Text.Megaparsec (ParseErrorBundle, Stream (..), mkPos, parse, satisfy, token)
+import Text.Megaparsec (ParseErrorBundle, Stream (..), mkPos, satisfy, token)
 import qualified Text.Megaparsec as Mega
 
 newtype TokenStream = TokenStream {tokens :: Vector SToken}
@@ -64,12 +64,18 @@ tok0 t = void $ satisfy (\case (SToken _ (TokNullary t')) -> t == t'; _ -> False
 tokBuiltin :: SParser S.Builtins
 tokBuiltin = token (\case SToken _ (TokBuiltin b) -> Just b; _ -> Nothing) Set.empty
 
+tokBuiltinNonOperator :: SParser S.Builtins
+tokBuiltinNonOperator = token (\case SToken _ (TokBuiltin b) | not (isOperator b) -> Just b; _ -> Nothing) Set.empty
+  where
+    isOperator (S.BOperator _) = True
+    isOperator _ = False
+
 tokOperator :: S.BuiltinOperators -> SParser ()
 tokOperator op = do
-    b <- tokBuiltin
+    b <- Mega.lookAhead tokBuiltin
     case b of
-        S.BOperator op' | op == op' -> pure ()
-        _ -> fail "Expected +"
+        S.BOperator op' | op == op' -> tokBuiltin >> pure ()
+        _ -> fail $ "Expected operator: " ++ show op
 
 tokIdentifier :: SParser String
 tokIdentifier = token (\case SToken _ (TokIdentifier s) -> Just s; _ -> Nothing) Set.empty
@@ -87,7 +93,7 @@ parseExprFromString input =
     let tokens = TokenStream $ V.fromList $ scanTokens input
         initialState = (Map.empty, 0)
         parseRun :: State.StateT InternState Identity (Either (ParseErrorBundle TokenStream Void) S.SynExpr)
-        parseRun = Mega.runParserT parseExpr "" tokens
+        parseRun = Mega.runParserT (parseExpr <* Mega.eof) "" tokens
      in runIdentity $ State.evalStateT parseRun initialState
 
 -- parse parseExpr "" $ TokenStream $ V.fromList $ scanTokens input
@@ -103,10 +109,10 @@ expression = lambda | let | forall | operator-or-annotation
 parseExpr :: SParser S.SynExpr
 parseExpr =
     Mega.choice
-        [ parseLambda
+        [ parseOperatorOrAnnotation
+        , parseLambda
         , parseLet
         , parseForall
-        , parseOperatorOrAnnotation
         ]
 
 -- lambda whsp "(" whsp nonreserved-label whsp ":" whsp1 expression whsp ")" whsp arrow whsp expression
@@ -180,43 +186,33 @@ parseLowestPrecedenceOperatorExpression = parsePlusExpression
 parsePlusExpression :: SParser S.SynExpr
 parsePlusExpression = do
     expr <- parseTimesExpression
-    Mega.choice
-        [ do
-            tokOperator S.BNaturalPlus
-            rhs <- parsePlusExpression
-            pure $ S.SApp (S.SApp (S.SBuiltin (S.BOperator S.BNaturalPlus)) expr) rhs
-        , pure expr
-        ]
+    rhss <- Mega.many $ do
+        tokOperator S.BNaturalPlus
+        parseTimesExpression
+    pure $ foldl (\acc rhs -> S.SApp (S.SApp (S.SBuiltin (S.BOperator S.BNaturalPlus)) acc) rhs) expr rhss
 
 -- times-expression = application-expression *(whsp times whsp application-expression)
 parseTimesExpression :: SParser S.SynExpr
 parseTimesExpression = do
     expr <- parseApplicationExpression
-    Mega.choice
-        [ do
-            tokOperator S.BNaturalTimes
-            rhs <- parseApplicationExpression
-            pure $ S.SApp (S.SApp (S.SBuiltin (S.BOperator S.BNaturalTimes)) expr) rhs
-        , pure expr
-        ]
+    rhss <- Mega.many $ do
+        tokOperator S.BNaturalTimes
+        parseApplicationExpression
+    pure $ foldl (\acc rhs -> S.SApp (S.SApp (S.SBuiltin (S.BOperator S.BNaturalTimes)) acc) rhs) expr rhss
 
 -- application-expression = primitive-expression *(whsp1 primitive-expression)
 parseApplicationExpression :: SParser S.SynExpr
 parseApplicationExpression = do
     expr <- parsePrimitiveExpression
-    Mega.choice
-        [ do
-            rhs <- parseApplicationExpression
-            pure $ S.SApp expr rhs
-        , pure expr
-        ]
+    rhss <- Mega.many parsePrimitiveExpression
+    pure $ foldl S.SApp expr rhss
 
 -- primitive-expression = natural-literal | builtin | variable | "(" whsp expression whsp ")"
 parsePrimitiveExpression :: SParser S.SynExpr
 parsePrimitiveExpression =
     Mega.choice
         [ S.SNatLit <$> tokNatLit
-        , S.SBuiltin <$> tokBuiltin
+        , S.SBuiltin <$> tokBuiltinNonOperator
         , do
             nameStr <- tokIdentifier
             name <- internNextName nameStr
