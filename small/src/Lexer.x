@@ -1,13 +1,11 @@
 {
-module Lexer (
-  SToken(..)
-  , BareToken (..)
-  , AlexPosn(..)
-  , TokenNullary (..)
+module Lexer ( SToken (..),
+   AlexPosn(..) 
   , scanTokens
   ) where
 import qualified Numeric.Natural as Nat
 import qualified Syntax as S
+import LexerDefs
 }
 
 %wrapper "posn"
@@ -95,28 +93,6 @@ tokens :-
 scanTokens :: String -> [SToken]
 scanTokens = alexScanTokens
 
--- | Tokens that carry no extra data.
-data TokenNullary
-  = TokLet          
-  | TokIn           
-  | TokForall       
-  | TokLambda       
-  | TokArrow        
-  | TokLParen       
-  | TokRParen       
-  | TokColon        
-  | TokEquals       
-  | TokAt
-  deriving (Eq, Show, Ord)
-
--- | Tokens without position information.
-data BareToken
-  = TokNullary TokenNullary
-  | TokBuiltin S.Builtins     
-  | TokNatLit Nat.Natural
-  | TokIdentifier String
-  | TokError String -- Lexer error: usually, invalid character. Presently, also `:` without a following space or comment.
-  deriving (Eq, Show, Ord)
 
 -- | Fully formed tokens with position information. These are the input tokens for the parser.
 data SToken = SToken { posn :: AlexPosn, token :: BareToken }

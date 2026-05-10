@@ -31,6 +31,7 @@ library:
   exposed-modules:
     - Small
     - Syntax
+    - LexerDefs
     - Lexer
     - Parser
   build-tools:

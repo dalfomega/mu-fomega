@@ -9,7 +9,8 @@ import qualified Data.Set as Set
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Void (Void)
-import Lexer (AlexPosn (..), BareToken (..), SToken (..), TokenNullary (..), scanTokens)
+import Lexer (AlexPosn (..), SToken (..), scanTokens)
+import LexerDefs (BareToken (..), TokenNullary (..))
 import Numeric.Natural (Natural)
 import qualified Syntax as S
 import Text.Megaparsec (ParseErrorBundle, Parsec, SourcePos (..), Stream (..), mkPos, parse, satisfy, token)
@@ -58,3 +59,17 @@ tokError :: SParser String
 tokError = token (\case SToken _ (TokError s) -> Just s; _ -> Nothing) Set.empty
 
 -- Implement the µFω grammar.
+
+parseExprFromString :: String -> Either (ParseErrorBundle TokenStream Void) S.SynExpr
+parseExprFromString input = parse parseExpr "" $ TokenStream $ V.fromList $ scanTokens input
+
+parseExpr :: SParser S.SynExpr
+parseExpr = undefined
+
+{-
+Top production:
+-}
+
+parseNatLit :: SParser S.SynExpr
+parseNatLit = S.SNatLit <$> tokNatLit
+    

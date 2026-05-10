@@ -2,6 +2,7 @@ module LexerSpec (spec) where
 
 import Control.Monad (forM_)
 import Lexer
+import LexerDefs
 import qualified Syntax as S
 import Test.Hspec (Spec, describe, it, shouldBe)
 
