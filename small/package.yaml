@@ -9,20 +9,22 @@ tested-with: GHC ==9.14.*
 dependencies:
   - base >= 4.8 && < 5  # need 4.8 for Numeric.Natural
   - array  # for alex
+  - containers # Data.Set for Megaparsec
   - megaparsec
-  - vector
+  - vector # We use Vector of tokens as input for Megaparsec.
 
 ghc-options:
   - -Wall
 
 default-extensions:
-  - OverloadedStrings
-  - StrictData
-  - LambdaCase
   - DerivingStrategies
-  - OverloadedRecordDot
-  - RecordWildCards
+  - LambdaCase
   - NamedFieldPuns
+  - NoFieldSelectors
+  - OverloadedRecordDot
+  - OverloadedStrings
+  - RecordWildCards
+  - StrictData
 
 library:
   source-dirs: src
@@ -30,6 +32,7 @@ library:
     - Small
     - Syntax
     - Lexer
+    - Parser
   build-tools:
     - alex
 

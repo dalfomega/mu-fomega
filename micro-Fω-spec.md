@@ -191,6 +191,19 @@ When a grammar rule specifies `a / b` then `a` is preferred to `b`; if `a` and t
 
 We use different libraries to implement this grammar, and compare performance.
 
+#### Non-empty whitespace
+
+Some places in the grammar require non-empty whitespace:
+
+- After `:` it is mandatory. `x: Natural` is admitted, but `x :Natural` is not.
+- After `let` and before and after `in`. For instance, `let x=1in2` is not admitted.
+- Between terms in a function application. For instance, `f (x + 1)` is admitted, but `f(x + 1)` is not.
+
+For this project it is probably better to simplify the grammar:
+
+- Make `: ` and `in ` into single tokens.
+- Admit `f(x)` (no whitespace between `f` and `(x)`) as I don't see any negative implications.
+
 ### Pretty-printing
 
 
