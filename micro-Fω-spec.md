@@ -172,6 +172,7 @@ plus-expression = times-expression *(whsp plus whsp times-expression)
 
 times-expression = application-expression *(whsp times whsp application-expression)
 
+; Nonempty-whitespace was required between terms in a function application, but we actually relax this to just whsp here.
 application-expression = primitive-expression *(whsp1 primitive-expression)
 
 primitive-expression =
@@ -196,13 +197,17 @@ We use different libraries to implement this grammar, and compare performance.
 Some places in the grammar require non-empty whitespace:
 
 - After `:` it is mandatory. `x: Natural` is admitted, but `x :Natural` is not.
-- After `let` and before and after `in`. For instance, `let x=1in2` is not admitted.
-- Between terms in a function application. For instance, `f (x + 1)` is admitted, but `f(x + 1)` is not.
+- After `let` and before and after `in`. For instance, `let x=1in2` is not admitted because `in2` could be an identifier (but `let x=1in 2` is admitted).
+- Between terms in a function application. For instance, `f (x + 1)` is admitted in Dhall, but `f(x + 1)` is not.
 
 For this project it is probably better to simplify the grammar:
 
-- Make `: ` and `in ` into single tokens.
+- Make `: `, `let `, and `in ` into single tokens that require whitespace.
 - Admit `f(x)` (no whitespace between `f` and `(x)`) as I don't see any negative implications.
+
+This allows us to get rid of the whitespace tokens in the lexer output.
+
+Note: the comment tokens might be required if we wanted to implement a standard formatter that preserves comments.
 
 ### Pretty-printing
 

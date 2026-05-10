@@ -1,12 +1,18 @@
 let Nat = ∀(r : Type) → (r → r) → r → r
+
 let zero = (λ(r : Type) → λ(s : r → r) → λ(z : r) → z) : Nat
+
 let succ =
-      ( λ(n : Nat) →
-          λ(r : Type) → λ(s : r → r) → λ(z : r) → s (n r s z)
-      ) : Nat → Nat
-let one = (succ zero) : Nat
-let two = (succ one) : Nat
-let three = (succ two) : Nat
+        (λ(n : Nat) → λ(r : Type) → λ(s : r → r) → λ(z : r) → s (n r s z))
+      : Nat → Nat
+
+let one = succ zero : Nat
+
+let two = succ one : Nat
+
+let three = succ two : Nat
+
 let toNatural =
       (λ(n : Nat) → n Natural (λ(k : Natural) → k + 1) 0) : Nat → Natural
-in toNatural three
+
+in  toNatural three

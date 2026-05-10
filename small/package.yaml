@@ -11,6 +11,7 @@ dependencies:
   - array  # for alex
   - containers # Data.Set for Megaparsec
   - megaparsec
+  - mtl  # MonadState for Megaparsec
   - vector # We use Vector of tokens as input for Megaparsec.
 
 ghc-options:
