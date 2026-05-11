@@ -1,6 +1,8 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Parser where
+module Parser (
+    parseExprFromString,
+) where
 
 import Control.Monad (void)
 import qualified Control.Monad.State as State
@@ -88,13 +90,19 @@ tokError = token (\case SToken _ (TokError s) -> Just s; _ -> Nothing) Set.empty
 
 -- Implement the µFω grammar.
 
-parseExprFromString :: String -> Either (ParseErrorBundle TokenStream Void) S.SynExpr
+topLevelParser :: SParser S.SynExpr
+topLevelParser = parseExpr <* Mega.eof
+
+parseExprFromString :: String -> (Either (ParseErrorBundle TokenStream Void) S.SynExpr, Map.Map String S.InternedName)
 parseExprFromString input =
     let tokens = TokenStream $ V.fromList $ scanTokens input
         initialState = (Map.empty, 0)
         parseRun :: State.StateT InternState Identity (Either (ParseErrorBundle TokenStream Void) S.SynExpr)
-        parseRun = Mega.runParserT (parseExpr <* Mega.eof) "" tokens
-     in runIdentity $ State.evalStateT parseRun initialState
+        parseRun = Mega.runParserT topLevelParser "" tokens
+        stateRun :: Identity (Either (ParseErrorBundle TokenStream Void) S.SynExpr, InternState)
+        stateRun = State.runStateT parseRun initialState
+        (result, (nameMap, _)) = runIdentity stateRun
+     in (result, nameMap)
 
 -- parse parseExpr "" $ TokenStream $ V.fromList $ scanTokens input
 
@@ -241,6 +249,3 @@ parsePrimitiveExpression =
 --     case nextToken of
 --         SToken _ (TokNullary t) -> exprLookup Map.! t
 --         _ -> parseOperatorOrAnnotation
-
-parseNatLit :: SParser S.SynExpr
-parseNatLit = S.SNatLit <$> tokNatLit
